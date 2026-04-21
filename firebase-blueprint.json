@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "Schedule": {
+      "title": "Schedule",
+      "description": "Represents an educational class schedule entry",
+      "type": "object",
+      "properties": {
+        "day": { "type": "string", "description": "Day of the week (e.g., 월, 화, 수...)" },
+        "startTime": { "type": "string", "description": "Start time of the class (HH:mm)" },
+        "endTime": { "type": "string", "description": "End time of the class (HH:mm)" },
+        "program": { "type": "string", "description": "Name of the education program" },
+        "location": { "type": "string", "description": "Location of the class" },
+        "target": { "type": "string", "description": "Target audience (e.g., 유초등, 중고등)" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["day", "startTime", "endTime", "program", "location", "target"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Represents an application user or staff",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "staff", "user"] },
+        "displayName": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/schedules/{scheduleId}": {
+      "schema": "Schedule",
+      "description": "Educational schedules collection"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and role management"
+    }
+  }
+}

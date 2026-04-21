@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - role: string (admin, staff, user)
+    //   - displayName: string
+    //
+    // Collection: schedules
+    // Fields:
+    //   - day: string (required)
+    //   - startTime: string (required, HH:mm)
+    //   - endTime: string (required, HH:mm)
+    //   - program: string (required)
+    //   - location: string (required)
+    //   - target: string (required)
+    //   - createdAt: timestamp
+    //   - updatedAt: timestamp
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         request.auth.token.email == "fumon1218@gmail.com");
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidSchedule(data) {
+      return data.keys().hasAll(['day', 'startTime', 'endTime', 'program', 'location', 'target']) &&
+             data.day is string && data.day.size() > 0 && data.day.size() < 10 &&
+             data.startTime is string && data.startTime.matches("^\\d{2}:\\d{2}$") &&
+             data.endTime is string && data.endTime.matches("^\\d{2}:\\d{2}$") &&
+             data.program is string && data.program.size() > 0 && data.program.size() < 100 &&
+             data.location is string && data.location.size() > 0 && data.location.size() < 100 &&
+             data.target is string && data.target.size() > 0 && data.target.size() < 50;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && request.resource.data.role == 'user';
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /schedules/{scheduleId} {
+      allow read, create, update, delete: if true; // Public access as requested
+    }
+  }
+}

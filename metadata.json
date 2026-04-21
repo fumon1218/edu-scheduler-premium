@@ -1,0 +1,6 @@
+{
+  "name": "에듀 스케줄러 (진로직업교육센터)",
+  "description": "교육원 스케줄표 디지털 관리 시스템. 프로그램, 장소, 대상을 블록 방식으로 입력하고 실시간으로 관리할 수 있는 교육 일정 관리툴입니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
