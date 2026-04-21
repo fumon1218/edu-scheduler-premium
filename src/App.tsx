@@ -591,7 +591,15 @@ export default function App() {
                       {filteredSchedules.length === 0 && (
                         <div className="p-32 text-center">
                           <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-dashed border-slate-200">
-                            <CalendarDays size={32} clas                   /* --- WEEKLY VIEW --- */
+                            <CalendarDays size={32} className="text-slate-300" />
+                          </div>
+                          <p className="text-sm font-black text-text-muted uppercase tracking-widest opacity-40">No entries matched your search</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : calendarView === 'week' ? (
+                  /* --- WEEKLY VIEW --- */
                   <div className="glass-panel rounded-[2rem] overflow-hidden">
                     <div className="grid grid-cols-7 border-b border-border-color bg-white/60">
                       {currentViewWeek.map((dayDate, idx) => (
