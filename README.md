@@ -2,19 +2,29 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Edu-Scheduler Premium
 
-This contains everything you need to run your app locally.
+Edu-Scheduler Premium is a high-end, privacy-focused educational scheduling application. It features a sophisticated glassmorphic UI and robust Firebase integration for managing classroom schedules across different roles.
 
-View your app in AI Studio: https://ai.studio/apps/212ead37-a4f7-4ed2-a526-bcabfb33c4d2
+## Features
+
+- **Premium Design**: Modern, glassmorphic UI with smooth animations.
+- **Privacy First**: Secure login via Google and restricted data access.
+- **Calendar Master**: Monthly and Weekly views for efficient scheduling.
+- **Role-Based Access**: Manage schedules with Admin and Staff roles.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Run the app:
    `npm run dev`
+
+## Deployment
+
+This project is configured for **Firebase Hosting**. 
+To deploy, run:
+`npm build`
+`firebase deploy`

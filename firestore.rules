@@ -64,7 +64,8 @@ service cloud.firestore {
     }
 
     match /schedules/{scheduleId} {
-      allow read, create, update, delete: if true; // Public access as requested
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff');
     }
   }
 }
