@@ -78,8 +78,15 @@ interface Schedule {
   createdAt: any;
 }
 
+interface SystemNotification {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: any;
+}
+
 const DAYS = ['월', '화', '수', '목', '금'];
-const PROGRAMS = ['진로·직업교육', '안전체험', '문화예술체육', '장애이해교육'];
+const PROGRAMS = ['코딩 영재반', '기초 파이썬', '웹 개발 입문', 'AI 창의 캠프', '방학 특강', '정기 코딩'];
 const LOCATIONS = ['1층 안전체험관', '1층 바리스타체험실', '2층 쿠킹체험실', '2층 e스포츠체험실', '2층 장애이해교육실', '2층 동아리실'];
 const TARGETS = ['유초등', '중고등', '전공과'];
 
@@ -97,6 +104,11 @@ export default function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState('');
+
+  // System Notifications State
+  const [notifs, setNotifs] = useState<SystemNotification[]>([]);
+  const [editingNotifId, setEditingNotifId] = useState<string | null>(null);
+  const [notifForm, setNotifForm] = useState({ title: '', content: '' });
 
   // Form State
   const [formData, setFormData] = useState({
@@ -146,26 +158,20 @@ export default function App() {
   useEffect(() => {
     const q = query(collection(db, 'schedules'), orderBy('startTime'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => {
-        const d = doc.data();
-        return {
-          id: doc.id,
-          date: d.date || format(startOfToday(), 'yyyy-MM-dd'),
-          ...d
-        };
-      }) as Schedule[];
-
-      const sorted = data.sort((a, b) => {
-        if (a.date !== b.date) return a.date.localeCompare(b.date);
-        return a.startTime.localeCompare(b.startTime);
-      });
-      setSchedules(sorted);
+      setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Schedule));
     });
     return () => unsubscribe();
   }, []);
 
+  // Fetch Notifications
+  useEffect(() => {
+    const q = query(collection(db, 'system_notifications'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      setNotifs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as SystemNotification));
+    });
+  }, []);
+
   // Calendar Helpers
-  // Calendar Helpers - Rebuilt for Stability
   const calendarDays = useMemo(() => {
     try {
       const monthStart = startOfMonth(baseDate);
@@ -174,7 +180,6 @@ export default function App() {
       const startOfGrid = startOfWeek(monthStart, { weekStartsOn: 1 });
       if (!isValid(startOfGrid)) return [];
 
-      // Always generate exactly 42 days (6 weeks) to ensure grid stability
       return Array.from({ length: 42 }).map((_, i) => addDays(startOfGrid, i));
     } catch (err) {
       console.error("Calendar engine error:", err);
@@ -219,10 +224,10 @@ export default function App() {
     try {
       if (editingId) {
         await updateDoc(doc(db, 'schedules', editingId), { ...formData, updatedAt: Timestamp.now() });
-        showNotify('일정이 수정되었습니다.');
+        triggerNotification('일정이 수정되었습니다.');
       } else {
         await addDoc(collection(db, 'schedules'), { ...formData, createdAt: Timestamp.now() });
-        showNotify('일정이 추가되었습니다.');
+        triggerNotification('일정이 추가되었습니다.');
       }
       resetForm();
     } catch (err) { console.error(err); }
@@ -237,12 +242,44 @@ export default function App() {
     setIsEditing(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('정말 삭제하시겠습니까?')) {
-      try {
-        await deleteDoc(doc(db, 'schedules', id));
-        showNotify('일정이 삭제되었습니다.');
-      } catch (err) { console.error(err); }
+  const deleteSchedule = async (id: string) => {
+    if (!window.confirm('정말 이 일정을 삭제하시겠습니까?')) return;
+    try {
+      await deleteDoc(doc(db, 'schedules', id));
+      triggerNotification('일정이 삭제되었습니다.');
+      resetForm();
+    } catch (err) {
+      triggerNotification('일정 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  // Notification CRUD
+  const saveNotif = async () => {
+    if (!notifForm.title.trim()) return;
+    try {
+      if (editingNotifId === 'new') {
+        await addDoc(collection(db, 'system_notifications'), {
+          ...notifForm,
+          createdAt: serverTimestamp()
+        });
+      } else if (editingNotifId) {
+        await updateDoc(doc(db, 'system_notifications', editingNotifId), notifForm);
+      }
+      setEditingNotifId(null);
+      setNotifForm({ title: '', content: '' });
+      triggerNotification('알림이 저장되었습니다.');
+    } catch (err) {
+      triggerNotification('알림 저장 오류가 발생했습니다.');
+    }
+  };
+
+  const deleteNotif = async (id: string) => {
+    if (!window.confirm('이 알림을 삭제하시겠습니까?')) return;
+    try {
+      await deleteDoc(doc(db, 'system_notifications', id));
+      triggerNotification('알림이 삭제되었습니다.');
+    } catch (err) {
+      triggerNotification('삭제 오류가 발생했습니다.');
     }
   };
 
@@ -525,8 +562,52 @@ export default function App() {
                   </form>
                 </div>
                 <div className="bg-white rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm">
-                  <h4 className="text-xs font-bold text-text-main uppercase mb-3 flex items-center gap-2"><Bell size={14} className="text-yellow-500" />시스템 알림</h4>
-                  <div className="space-y-3"><div className="p-3 bg-bg-primary rounded-lg border border-border-color"><p className="text-[11px] font-bold text-text-main mb-0.5">서버 정기 점검 안내</p><p className="text-[10px] text-text-muted">내일 새벽 02:00 - 04:00 (KST)</p></div></div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Bell size={14} className="text-yellow-500" />시스템 알림</h4>
+                    {isAdmin && (
+                      <button onClick={() => { setEditingNotifId('new'); setNotifForm({ title: '', content: '' }); }} className="p-1 hover:bg-yellow-50 rounded-lg text-yellow-600 transition-colors"><Plus size={14} /></button>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {editingNotifId === 'new' && (
+                      <div className="p-3 bg-yellow-50/50 rounded-lg border border-yellow-200 space-y-2">
+                        <input className="w-full bg-transparent text-[11px] font-bold outline-none border-b border-yellow-200" placeholder="제목" value={notifForm.title} onChange={e => setNotifForm({...notifForm, title: e.target.value})} autoFocus />
+                        <input className="w-full bg-transparent text-[10px] outline-none" placeholder="내용" value={notifForm.content} onChange={e => setNotifForm({...notifForm, content: e.target.value})} />
+                        <div className="flex justify-end gap-2 pt-1 text-[10px] font-bold">
+                          <button onClick={() => setEditingNotifId(null)} className="text-gray-400">취소</button>
+                          <button onClick={saveNotif} className="text-yellow-600">저장</button>
+                        </div>
+                      </div>
+                    )}
+                    {notifs.map(n => (
+                      <div key={n.id} className="p-3 bg-bg-primary rounded-lg border border-border-color group relative">
+                        {editingNotifId === n.id ? (
+                          <div className="space-y-2">
+                            <input className="w-full bg-transparent text-[11px] font-bold outline-none border-b border-gray-200" value={notifForm.title} onChange={e => setNotifForm({...notifForm, title: e.target.value})} autoFocus />
+                            <input className="w-full bg-transparent text-[10px] outline-none" value={notifForm.content} onChange={e => setNotifForm({...notifForm, content: e.target.value})} />
+                            <div className="flex justify-end gap-2 pt-1 text-[10px] font-bold">
+                              <button onClick={() => setEditingNotifId(null)} className="text-gray-400">취소</button>
+                              <button onClick={saveNotif} className="text-accent-color">수정</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-[11px] font-bold text-text-main mb-0.5">{n.title}</p>
+                            <p className="text-[10px] text-text-muted">{n.content}</p>
+                            {isAdmin && (
+                              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                <button onClick={() => { setEditingNotifId(n.id); setNotifForm({ title: n.title, content: n.content }); }} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-accent-color"><Edit2 size={10} /></button>
+                                <button onClick={() => deleteNotif(n.id)} className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"><X size={10} /></button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                    {notifs.length === 0 && !editingNotifId && (
+                      <p className="text-[10px] text-text-muted italic py-4 text-center">공지사항이 없습니다.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
