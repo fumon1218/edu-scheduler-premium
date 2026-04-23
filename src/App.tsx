@@ -28,7 +28,8 @@ import {
   query, 
   orderBy, 
   Timestamp,
-  getDocFromServer
+  getDocFromServer,
+  serverTimestamp
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -224,10 +225,10 @@ export default function App() {
     try {
       if (editingId) {
         await updateDoc(doc(db, 'schedules', editingId), { ...formData, updatedAt: Timestamp.now() });
-        triggerNotification('일정이 수정되었습니다.');
+        showNotify('일정이 수정되었습니다.');
       } else {
         await addDoc(collection(db, 'schedules'), { ...formData, createdAt: Timestamp.now() });
-        triggerNotification('일정이 추가되었습니다.');
+        showNotify('일정이 추가되었습니다.');
       }
       resetForm();
     } catch (err) { console.error(err); }
@@ -246,10 +247,10 @@ export default function App() {
     if (!window.confirm('정말 이 일정을 삭제하시겠습니까?')) return;
     try {
       await deleteDoc(doc(db, 'schedules', id));
-      triggerNotification('일정이 삭제되었습니다.');
+      showNotify('일정이 삭제되었습니다.');
       resetForm();
     } catch (err) {
-      triggerNotification('일정 삭제 중 오류가 발생했습니다.');
+      showNotify('일정 삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -267,9 +268,9 @@ export default function App() {
       }
       setEditingNotifId(null);
       setNotifForm({ title: '', content: '' });
-      triggerNotification('알림이 저장되었습니다.');
+      showNotify('알림이 저장되었습니다.');
     } catch (err) {
-      triggerNotification('알림 저장 오류가 발생했습니다.');
+      showNotify('알림 저장 오류가 발생했습니다.');
     }
   };
 
@@ -277,9 +278,9 @@ export default function App() {
     if (!window.confirm('이 알림을 삭제하시겠습니까?')) return;
     try {
       await deleteDoc(doc(db, 'system_notifications', id));
-      triggerNotification('알림이 삭제되었습니다.');
+      showNotify('알림이 삭제되었습니다.');
     } catch (err) {
-      triggerNotification('삭제 오류가 발생했습니다.');
+      showNotify('삭제 오류가 발생했습니다.');
     }
   };
 
@@ -417,7 +418,7 @@ export default function App() {
                             {isAdmin && (
                               <div className="flex items-center gap-1 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={() => handleEdit(s)} className="p-2 text-text-muted hover:text-accent-color rounded-lg hover:bg-blue-50 transition-all"><Edit2 size={16} /></button>
-                                <button onClick={() => handleDelete(s.id)} className="p-2 text-text-muted hover:text-red-500 rounded-lg hover:bg-red-50 transition-all"><Trash2 size={16} /></button>
+                                <button onClick={() => deleteSchedule(s.id)} className="p-2 text-text-muted hover:text-red-500 rounded-lg hover:bg-red-50 transition-all"><Trash2 size={16} /></button>
                               </div>
                             )}
                           </div>
