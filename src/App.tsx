@@ -435,7 +435,7 @@ export default function App() {
       <aside className="hidden lg:flex w-64 bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
         <div className="flex items-center gap-3 mb-10">
           <div className="w-10 h-10 rounded-xl overflow-hidden border border-border-color shadow-sm shrink-0">
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+            <img src="./logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
           </div>
           <span className="font-bold text-lg tracking-tight text-accent-color">EduScheduler</span>
         </div>
