@@ -119,6 +119,7 @@ export default function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState('');
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   // System Notifications State
   const [notifs, setNotifs] = useState<SystemNotification[]>([]);
@@ -412,8 +413,14 @@ export default function App() {
           <div className="max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
               <div className="flex items-center gap-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-text-main">
+                <div className="relative">
+                  <h2 
+                    onClick={() => (viewMode === 'calendar' || viewMode === 'teacher') && setIsDatePickerOpen(!isDatePickerOpen)} 
+                    className={cn(
+                      "text-2xl font-bold text-text-main transition-all",
+                      (viewMode === 'calendar' || viewMode === 'teacher') && "cursor-pointer hover:text-accent-color flex items-center gap-2 group"
+                    )}
+                  >
                     {viewMode === 'list' ? '스케줄 관리' : 
                      viewMode === 'teacher' ? '교사 시간표' : 
                      `${safeFormat(baseDate, 'yyyy년 M월')} 일정표`}
@@ -421,6 +428,53 @@ export default function App() {
                   <p className="text-sm text-text-muted">
                     {viewMode === 'teacher' ? '교사별 개인 시간표를 확인하세요' : '교육 프로그램 일정을 효율적으로 관리하세요'}
                   </p>
+                  
+                  {/* Month/Year Picker Popover */}
+                  <AnimatePresence>
+                    {isDatePickerOpen && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute top-full left-0 mt-2 p-4 bg-white border border-border-color rounded-2xl shadow-2xl z-[50] min-w-[280px]"
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <button onClick={() => setBaseDate(subMonths(baseDate, 12))} className="p-1 hover:bg-gray-100 rounded-lg"><ChevronLeft size={16} /></button>
+                          <span className="font-bold text-lg">{safeFormat(baseDate, 'yyyy년')}</span>
+                          <button onClick={() => setBaseDate(addMonths(baseDate, 12))} className="p-1 hover:bg-gray-100 rounded-lg"><ChevronRight size={16} /></button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {Array.from({ length: 12 }).map((_, i) => {
+                            const targetDate = new Date(getYear(baseDate), i, 1);
+                            const isSelected = getMonth(baseDate) === i;
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => {
+                                  setBaseDate(targetDate);
+                                  setIsDatePickerOpen(false);
+                                }}
+                                className={cn(
+                                  "py-2 rounded-xl text-sm font-bold transition-all",
+                                  isSelected ? "bg-accent-color text-white shadow-md" : "hover:bg-gray-50 text-text-muted hover:text-text-main"
+                                )}
+                              >
+                                {i + 1}월
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-border-color">
+                          <button 
+                            onClick={() => { setBaseDate(startOfToday()); setIsDatePickerOpen(false); }}
+                            className="w-full py-2 text-xs font-bold text-accent-color hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            오늘로 이동
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
                 {(viewMode === 'calendar' || viewMode === 'teacher') && (
                   <div className="flex items-center gap-2 px-1 py-1 bg-white border border-border-color rounded-xl h-fit">
