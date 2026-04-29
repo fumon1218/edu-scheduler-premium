@@ -712,26 +712,37 @@ export default function App() {
                           return (
                             <div 
                               key={dateStr || idx} 
+                              onClick={() => {
+                                setFormData({ ...formData, date: dateStr, day: safeFormat(dayDate, 'EEE', { locale: ko })[0] });
+                                setEditingId(null);
+                                document.getElementById('schedule-form')?.scrollIntoView({ behavior: 'smooth' });
+                                setTimeout(() => document.getElementById('program-input')?.focus(), 100);
+                              }}
                               className={cn(
-                                "min-h-[120px] p-2 flex flex-col transition-colors hover:bg-gray-50/10",
+                                "min-h-[120px] p-2 flex flex-col transition-colors hover:bg-gray-50/10 cursor-pointer group/cell",
                                 !isCurMonth ? "bg-gray-50/30 text-gray-300" : "bg-white text-text-main"
                               )}
                             >
                               <div className="flex justify-between items-start mb-2">
                                 <span className={cn(
                                   "text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center transition-all",
-                                  isToday ? "bg-accent-color text-white shadow-sm" : "text-text-muted"
+                                  isToday ? "bg-accent-color text-white shadow-sm" : "text-text-muted group-hover/cell:text-accent-color"
                                 )}>
                                   {safeFormat(dayDate, 'd')}
                                 </span>
+                                <Plus size={12} className="text-gray-200 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
                               </div>
 
                               <div className="flex-1 space-y-1">
                                 {daySchedules.slice(0, 4).map(s => (
                                   <div 
                                     key={s.id}
-                                    onClick={(e) => { e.stopPropagation(); handleEdit(s); }}
-                                    className="px-1.5 py-0.5 bg-blue-50/50 text-accent-color text-[9px] font-bold rounded border border-blue-100/50 truncate cursor-pointer hover:bg-blue-100 transition-colors"
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      handleEdit(s); 
+                                      document.getElementById('schedule-form')?.scrollIntoView({ behavior: 'smooth' });
+                                    }}
+                                    className="px-1.5 py-1 bg-blue-50/50 text-accent-color text-[9px] font-bold rounded border border-blue-100/50 truncate cursor-pointer hover:bg-blue-100 hover:border-blue-300 transition-all shadow-sm"
                                   >
                                     {s.startTime} {s.program}
                                   </div>
@@ -791,6 +802,9 @@ export default function App() {
                           value={formData.program} 
                           onChange={(e) => setFormData({...formData, program: e.target.value})}
                         >
+                          {(!programs.includes(formData.program) && formData.program) && (
+                            <option value={formData.program}>{formData.program} (삭제됨)</option>
+                          )}
                           {programs.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
@@ -799,14 +813,24 @@ export default function App() {
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">장소</label>
                       <div className="relative">
-                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})}>{locations.map(l => <option key={l} value={l}>{l}</option>)}</select>
+                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})}>
+                          {(!locations.includes(formData.location) && formData.location) && (
+                            <option value={formData.location}>{formData.location} (삭제됨)</option>
+                          )}
+                          {locations.map(l => <option key={l} value={l}>{l}</option>)}
+                        </select>
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
                       </div>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">대상</label>
                       <div className="relative">
-                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})}>{targets.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})}>
+                          {(!targets.includes(formData.target) && formData.target) && (
+                            <option value={formData.target}>{formData.target} (삭제됨)</option>
+                          )}
+                          {targets.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
                       </div>
                     </div>
@@ -821,7 +845,14 @@ export default function App() {
                       </div>
                     </div>
                     <button type="submit" className="w-full py-3 bg-accent-color text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] mt-2 disabled:bg-gray-400 disabled:shadow-none">{editingId ? '수정 완료' : '일정 추가하기'}</button>
-                    {editingId && <button type="button" onClick={resetForm} className="w-full py-3 text-text-muted text-xs font-bold hover:text-text-main transition-colors">취소</button>}
+                    {editingId && (
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => handleDelete(editingId)} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl text-xs font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2 mt-2">
+                          <Trash2 size={14} /> 일정 삭제
+                        </button>
+                        <button type="button" onClick={resetForm} className="flex-1 py-3 text-text-muted text-xs font-bold hover:text-text-main transition-colors mt-2">취소</button>
+                      </div>
+                    )}
                   </form>
                 </motion.div>
 
