@@ -94,10 +94,11 @@ interface SystemNotification {
   createdAt: any;
 }
 
+// --- Constants (Defaults) ---
+const DEFAULT_PROGRAMS = ['코딩 영재반', '기초 파이썬', '웹 개발 입문', 'AI 창의 캠프', '방학 특강', '정기 코딩'];
+const DEFAULT_LOCATIONS = ['1층 안전체험관', '1층 바리스타체험실', '2층 쿠킹체험실', '2층 e스포츠체험실', '2층 장애이해교육실', '2층 동아리실'];
+const DEFAULT_TARGETS = ['유초등', '중고등', '전공과'];
 const DAYS = ['월', '화', '수', '목', '금'];
-const PROGRAMS = ['코딩 영재반', '기초 파이썬', '웹 개발 입문', 'AI 창의 캠프', '방학 특강', '정기 코딩'];
-const LOCATIONS = ['1층 안전체험관', '1층 바리스타체험실', '2층 쿠킹체험실', '2층 e스포츠체험실', '2층 장애이해교육실', '2층 동아리실'];
-const TARGETS = ['유초등', '중고등', '전공과'];
 
 export default function App() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -120,6 +121,13 @@ export default function App() {
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState('');
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isManagingCategories, setIsManagingCategories] = useState(false);
+
+  // Dynamic Lists State
+  const [programs, setPrograms] = useState<string[]>(DEFAULT_PROGRAMS);
+  const [locations, setLocations] = useState<string[]>(DEFAULT_LOCATIONS);
+  const [targets, setTargets] = useState<string[]>(DEFAULT_TARGETS);
+  const [newCategoryItem, setNewCategoryItem] = useState({ type: '', value: '' });
 
   // System Notifications State
   const [notifs, setNotifs] = useState<SystemNotification[]>([]);
@@ -132,9 +140,9 @@ export default function App() {
     date: format(startOfToday(), 'yyyy-MM-dd'),
     startTime: '10:00',
     endTime: '12:00',
-    program: PROGRAMS[0],
-    location: LOCATIONS[0],
-    target: TARGETS[0],
+    program: '',
+    location: '',
+    target: '',
     teacherId: ''
   });
 
@@ -199,6 +207,47 @@ export default function App() {
       }
     });
   }, [selectedTeacherId]);
+
+  // Fetch App Settings (Categories)
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'config'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.programs) setPrograms(data.programs);
+        if (data.locations) setLocations(data.locations);
+        if (data.targets) setTargets(data.targets);
+      } else {
+        // Initialize with defaults if not exists
+        updateDoc(doc(db, 'settings', 'config'), {
+          programs: DEFAULT_PROGRAMS,
+          locations: DEFAULT_LOCATIONS,
+          targets: DEFAULT_TARGETS
+        }).catch(() => {
+          // If update fails (e.g. doc doesn't exist at all), try setDoc or just use defaults
+          import('firebase/firestore').then(({ setDoc }) => {
+            setDoc(doc(db, 'settings', 'config'), {
+              programs: DEFAULT_PROGRAMS,
+              locations: DEFAULT_LOCATIONS,
+              targets: DEFAULT_TARGETS
+            });
+          });
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Update Form Defaults when categories load
+  useEffect(() => {
+    if (!editingId) {
+      setFormData(prev => ({
+        ...prev,
+        program: prev.program || programs[0] || '',
+        location: prev.location || locations[0] || '',
+        target: prev.target || targets[0] || ''
+      }));
+    }
+  }, [programs, locations, targets, editingId]);
 
   // Calendar Helpers
   const calendarDays = useMemo(() => {
@@ -343,10 +392,32 @@ export default function App() {
     }
   };
 
+  // Category Actions
+  const updateCategories = async (type: 'programs' | 'locations' | 'targets', newList: string[]) => {
+    try {
+      await updateDoc(doc(db, 'settings', 'config'), { [type]: newList });
+      showNotify('항목이 업데이트되었습니다.');
+    } catch (err) {
+      showNotify('업데이트 중 오류가 발생했습니다.');
+    }
+  };
+
+  const addCategoryItem = (type: 'programs' | 'locations' | 'targets', value: string) => {
+    if (!value.trim()) return;
+    const currentList = type === 'programs' ? programs : type === 'locations' ? locations : targets;
+    if (currentList.includes(value)) return showNotify('이미 존재하는 항목입니다.');
+    updateCategories(type, [...currentList, value]);
+  };
+
+  const deleteCategoryItem = (type: 'programs' | 'locations' | 'targets', value: string) => {
+    const currentList = type === 'programs' ? programs : type === 'locations' ? locations : targets;
+    updateCategories(type, currentList.filter(item => item !== value));
+  };
+
   const resetForm = () => {
     setFormData({
       day: '월', date: format(startOfToday(), 'yyyy-MM-dd'), startTime: '10:00', endTime: '12:00',
-      program: PROGRAMS[0], location: LOCATIONS[0], target: TARGETS[0], teacherId: ''
+      program: programs[0] || '', location: locations[0] || '', target: targets[0] || '', teacherId: ''
     });
     setEditingId(null);
     setIsEditing(false);
@@ -373,7 +444,8 @@ export default function App() {
           <div onClick={() => { setViewMode('list'); setSelectedDay(null); }} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'list' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><LayoutList size={18} /><span>리스트 보기</span></div>
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
-          <div onClick={() => setIsManagingTeachers(!isManagingTeachers)} className="px-4 py-2.5 text-text-muted hover:bg-gray-50 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3"><Settings size={18} /><span>교사 관리</span></div>
+          <div onClick={() => { setIsManagingTeachers(!isManagingTeachers); setIsManagingCategories(false); }} className="px-4 py-2.5 text-text-muted hover:bg-gray-50 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3"><Users size={18} /><span>교사 관리</span></div>
+          <div onClick={() => { setIsManagingCategories(!isManagingCategories); setIsManagingTeachers(false); }} className="px-4 py-2.5 text-text-muted hover:bg-gray-50 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3"><Settings size={18} /><span>항목 관리</span></div>
         </nav>
 
         <div className="pt-6 border-t border-border-color">
@@ -671,21 +743,21 @@ export default function App() {
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">프로그램 명</label>
                       <div className="relative">
-                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.program} onChange={(e) => setFormData({...formData, program: e.target.value})}>{PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}</select>
+                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.program} onChange={(e) => setFormData({...formData, program: e.target.value})}>{programs.map(p => <option key={p} value={p}>{p}</option>)}</select>
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
                       </div>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">장소</label>
                       <div className="relative">
-                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})}>{LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}</select>
+                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})}>{locations.map(l => <option key={l} value={l}>{l}</option>)}</select>
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
                       </div>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">대상</label>
                       <div className="relative">
-                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})}>{TARGETS.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})}>{targets.map(t => <option key={t} value={t}>{t}</option>)}</select>
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
                       </div>
                     </div>
@@ -707,7 +779,7 @@ export default function App() {
                 {isManagingTeachers && (
                   <div className="bg-white rounded-2xl border border-border-color p-5 shadow-sm animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Settings size={14} />교사 명단 관리</h4>
+                      <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Users size={14} />교사 명단 관리</h4>
                       <button onClick={() => setIsManagingTeachers(false)} className="text-text-muted hover:text-text-main"><X size={14} /></button>
                     </div>
                     <div className="flex gap-2 mb-4">
@@ -722,6 +794,48 @@ export default function App() {
                         </div>
                       ))}
                       {teachers.length === 0 && <p className="text-[10px] text-text-muted text-center py-4">등록된 교사가 없습니다.</p>}
+                    </div>
+                  </div>
+                )}
+
+                {isManagingCategories && (
+                  <div className="bg-white rounded-2xl border border-border-color p-5 shadow-sm animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Settings size={14} />카테고리 항목 관리</h4>
+                      <button onClick={() => setIsManagingCategories(false)} className="text-text-muted hover:text-text-main"><X size={14} /></button>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      {[
+                        { label: '프로그램', type: 'programs' as const, list: programs },
+                        { label: '장소', type: 'locations' as const, list: locations },
+                        { label: '대상', type: 'targets' as const, list: targets }
+                      ].map(cat => (
+                        <div key={cat.type} className="space-y-2">
+                          <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">{cat.label}</label>
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              placeholder={`${cat.label} 추가`} 
+                              className="flex-1 h-8 px-3 bg-bg-primary border border-border-color rounded-lg text-[11px] outline-none focus:border-accent-color"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  addCategoryItem(cat.type, (e.target as HTMLInputElement).value);
+                                  (e.target as HTMLInputElement).value = '';
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto pt-1">
+                            {cat.list.map(item => (
+                              <div key={item} className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg group">
+                                <span className="text-[10px] font-medium text-text-main">{item}</span>
+                                <button onClick={() => deleteCategoryItem(cat.type, item)} className="text-gray-300 hover:text-red-500 transition-colors"><X size={10} /></button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
