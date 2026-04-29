@@ -452,7 +452,7 @@ export default function App() {
               <p className="text-xs font-black text-accent-color">Premium v1.2.0</p>
             </div>
             
-            <div className="rounded-xl overflow-hidden border border-border-color shadow-sm grayscale hover:grayscale-0 transition-all duration-500 cursor-help group">
+            <div className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-help group">
               <img src="./logo.png" alt="Diorama" className="w-full h-24 object-cover group-hover:scale-110 transition-transform duration-700" />
               <div className="p-2 bg-white/80 backdrop-blur-sm">
                 <p className="text-[8px] font-bold text-text-muted text-center">강릉분원 디오라마</p>
