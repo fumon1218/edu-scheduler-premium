@@ -121,7 +121,7 @@ export default function App() {
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState('');
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [isManagingCategories, setIsManagingCategories] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Dynamic Lists State
   const [programs, setPrograms] = useState<string[]>(DEFAULT_PROGRAMS);
@@ -444,8 +444,7 @@ export default function App() {
           <div onClick={() => { setViewMode('list'); setSelectedDay(null); }} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'list' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><LayoutList size={18} /><span>리스트 보기</span></div>
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
-          <div onClick={() => { setIsManagingTeachers(!isManagingTeachers); setIsManagingCategories(false); }} className="px-4 py-2.5 text-text-muted hover:bg-gray-50 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3"><Users size={18} /><span>교사 관리</span></div>
-          <div onClick={() => { setIsManagingCategories(!isManagingCategories); setIsManagingTeachers(false); }} className="px-4 py-2.5 text-text-muted hover:bg-gray-50 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3"><Settings size={18} /><span>항목 관리</span></div>
+          <div onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
         </nav>
 
         <div className="pt-6 border-t border-border-color">
@@ -776,36 +775,39 @@ export default function App() {
                   </form>
                 </div>
 
-                {isManagingTeachers && (
-                  <div className="bg-white rounded-2xl border border-border-color p-5 shadow-sm animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Users size={14} />교사 명단 관리</h4>
-                      <button onClick={() => setIsManagingTeachers(false)} className="text-text-muted hover:text-text-main"><X size={14} /></button>
+                {isSettingsOpen && (
+                  <div className="bg-white rounded-2xl border border-border-color p-6 shadow-sm animate-in fade-in slide-in-from-right-4 duration-300 space-y-8 max-h-[80vh] overflow-y-auto">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-bold text-text-main uppercase tracking-tight flex items-center gap-2"><Settings size={16} className="text-accent-color" />시스템 설정</h3>
+                      <button onClick={() => setIsSettingsOpen(false)} className="text-text-muted hover:text-text-main"><X size={18} /></button>
                     </div>
-                    <div className="flex gap-2 mb-4">
-                      <input type="text" placeholder="교사 이름" className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTeacher()} />
-                      <button onClick={addTeacher} className="px-3 bg-accent-color text-white rounded-lg text-xs font-bold">추가</button>
-                    </div>
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                      {teachers.map(t => (
-                        <div key={t.id} className="flex items-center justify-between p-2 bg-bg-primary rounded-lg border border-border-color group">
-                          <span className="text-xs font-medium text-text-main">{t.name}</span>
-                          <button onClick={() => deleteTeacher(t.id)} className="opacity-0 group-hover:opacity-100 p-1 text-text-muted hover:text-red-500 transition-all"><Trash2 size={12} /></button>
-                        </div>
-                      ))}
-                      {teachers.length === 0 && <p className="text-[10px] text-text-muted text-center py-4">등록된 교사가 없습니다.</p>}
-                    </div>
-                  </div>
-                )}
 
-                {isManagingCategories && (
-                  <div className="bg-white rounded-2xl border border-border-color p-5 shadow-sm animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Settings size={14} />카테고리 항목 관리</h4>
-                      <button onClick={() => setIsManagingCategories(false)} className="text-text-muted hover:text-text-main"><X size={14} /></button>
-                    </div>
-                    
-                    <div className="space-y-6">
+                    {/* Teacher Management Section */}
+                    <section className="space-y-4">
+                      <div className="flex items-center justify-between border-b border-border-color pb-2">
+                        <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><Users size={14} />교사 명단 관리</h4>
+                      </div>
+                      <div className="flex gap-2">
+                        <input type="text" placeholder="교사 이름 추가" className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTeacher()} />
+                        <button onClick={addTeacher} className="px-4 bg-accent-color text-white rounded-lg text-xs font-bold shadow-sm hover:bg-blue-700 transition-colors">추가</button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {teachers.map(t => (
+                          <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 border border-blue-100 rounded-full group transition-all hover:bg-blue-50">
+                            <span className="text-[11px] font-bold text-accent-color">{t.name}</span>
+                            <button onClick={() => deleteTeacher(t.id)} className="text-blue-300 hover:text-red-500 transition-colors"><X size={12} /></button>
+                          </div>
+                        ))}
+                        {teachers.length === 0 && <p className="text-[10px] text-text-muted italic py-2">등록된 교사가 없습니다.</p>}
+                      </div>
+                    </section>
+
+                    {/* Category Management Section */}
+                    <section className="space-y-6">
+                      <div className="flex items-center justify-between border-b border-border-color pb-2">
+                        <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><LayoutList size={14} />항목 카테고리 관리</h4>
+                      </div>
+                      
                       {[
                         { label: '프로그램', type: 'programs' as const, list: programs },
                         { label: '장소', type: 'locations' as const, list: locations },
@@ -826,9 +828,9 @@ export default function App() {
                               }}
                             />
                           </div>
-                          <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto pt-1">
+                          <div className="flex flex-wrap gap-1.5 pt-1">
                             {cat.list.map(item => (
-                              <div key={item} className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg group">
+                              <div key={item} className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg group hover:bg-white transition-all">
                                 <span className="text-[10px] font-medium text-text-main">{item}</span>
                                 <button onClick={() => deleteCategoryItem(cat.type, item)} className="text-gray-300 hover:text-red-500 transition-colors"><X size={10} /></button>
                               </div>
@@ -836,7 +838,7 @@ export default function App() {
                           </div>
                         </div>
                       ))}
-                    </div>
+                    </section>
                   </div>
                 )}
                 <div className="bg-white rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm">
