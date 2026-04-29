@@ -36,9 +36,14 @@ import {
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   User 
 } from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { auth, db } from './lib/firebase';
+import firebaseConfig from '../firebase-applet-config.json';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -134,6 +139,17 @@ export default function App() {
   const [editingNotifId, setEditingNotifId] = useState<string | null>(null);
   const [notifForm, setNotifForm] = useState({ title: '', content: '' });
 
+  // Auth Form State
+  const [loginId, setLoginId] = useState('');
+  const [loginPw, setLoginPw] = useState('');
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // Account Management State
+  const [newUserId, setNewUserId] = useState('');
+  const [newUserPw, setNewUserPw] = useState('');
+  const [registeredUsers, setRegisteredUsers] = useState<{id: string, role: string}[]>([]);
+
   // Form State
   const [formData, setFormData] = useState({
     day: '월',
@@ -170,14 +186,39 @@ export default function App() {
     } catch { return false; }
   };
 
-  // Auth State
+  // Auth State & Role Check
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      setIsAdmin(true);
+      if (u) {
+        // Simple Admin Check: If ID is 'admin' or has '@edu.com' and is 'admin'
+        const id = u.email?.split('@')[0];
+        if (id === 'admin') {
+          setIsAdmin(true);
+        } else {
+          // Check Firestore for role
+          const userDoc = await getDocFromServer(doc(db, 'registered_users', u.uid));
+          if (userDoc.exists() && userDoc.data().role === 'admin') {
+            setIsAdmin(true);
+          } else {
+            setIsAdmin(false);
+          }
+        }
+      } else {
+        setIsAdmin(false);
+      }
     });
     return () => unsubscribe();
   }, []);
+
+  // Fetch Registered Users (for Admin)
+  useEffect(() => {
+    if (!isAdmin) return;
+    const q = query(collection(db, 'registered_users'), orderBy('id'));
+    return onSnapshot(q, (snapshot) => {
+      setRegisteredUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+    });
+  }, [isAdmin]);
 
   // Fetch Schedules
   useEffect(() => {
@@ -292,7 +333,25 @@ export default function App() {
   }, [schedules, searchTerm, selectedDay, viewMode, selectedTeacherId]);
 
   // Actions
-  const handleLogin = async () => {
+  const handleIdPasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginId || !loginPw) return;
+    setIsLoginLoading(true);
+    setLoginError('');
+    try {
+      const email = loginId.includes('@') ? loginId : `${loginId}@edu.com`;
+      await signInWithEmailAndPassword(auth, email, loginPw);
+      setLoginId('');
+      setLoginPw('');
+    } catch (err: any) {
+      console.error(err);
+      setLoginError('아이디 또는 비밀번호가 일치하지 않습니다.');
+    } finally {
+      setIsLoginLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
     try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (err) { console.error(err); }
   };
 
@@ -381,14 +440,58 @@ export default function App() {
     }
   };
 
-  const deleteTeacher = async (id: string) => {
-    if (!window.confirm('정말 이 교사를 삭제하시겠습니까? 해당 교사의 일정은 유지됩니다.')) return;
+  // Account Management Actions
+  const createNewAccount = async () => {
+    if (!newUserId.trim() || !newUserPw.trim()) return;
     try {
-      await deleteDoc(doc(db, 'teachers', id));
-      showNotify('교사가 삭제되었습니다.');
-      if (selectedTeacherId === id) setSelectedTeacherId(teachers.find(t => t.id !== id)?.id || null);
+      const email = newUserId.includes('@') ? newUserId : `${newUserId}@edu.com`;
+      
+      // Use secondary app to create user without logging out current admin
+      const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
+      const secondaryAuth = getAuth(secondaryApp);
+      
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newUserPw);
+      const newUid = userCredential.user.uid;
+      
+      // Save user info to Firestore
+      await updateDoc(doc(db, 'registered_users', newUid), {
+        id: newUserId,
+        email: email,
+        role: 'user',
+        createdAt: serverTimestamp()
+      }).catch(async () => {
+        // If update fails, use setDoc
+        const { setDoc } = await import('firebase/firestore');
+        await setDoc(doc(db, 'registered_users', newUid), {
+          id: newUserId,
+          email: email,
+          role: 'user',
+          createdAt: serverTimestamp()
+        });
+      });
+
+      await deleteApp(secondaryApp);
+      
+      setNewUserId('');
+      setNewUserPw('');
+      showNotify(`계정(${newUserId})이 생성되었습니다.`);
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/email-already-in-use') {
+        showNotify('이미 존재하는 아이디입니다.');
+      } else {
+        showNotify('계정 생성 중 오류가 발생했습니다.');
+      }
+    }
+  };
+
+  const deleteAccount = async (uid: string, userId: string) => {
+    if (!window.confirm(`계정(${userId})을 목록에서 삭제하시겠습니까? (인증 서버 데이터는 유지됩니다)`)) return;
+    try {
+      await deleteDoc(doc(db, 'registered_users', uid));
+      showNotify('계정 정보가 삭제되었습니다.');
     } catch (err) {
-      showNotify('교사 삭제 중 오류가 발생했습니다.');
+      showNotify('삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -428,6 +531,21 @@ export default function App() {
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 3000);
   };
+
+  if (!user) {
+    return (
+      <LoginOverlay 
+        onLogin={handleIdPasswordLogin}
+        onGoogleLogin={handleGoogleLogin}
+        id={loginId}
+        setId={setLoginId}
+        pw={loginPw}
+        setPw={setLoginPw}
+        isLoading={isLoginLoading}
+        error={loginError}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen bg-bg-primary overflow-hidden font-sans select-none">
@@ -934,6 +1052,38 @@ export default function App() {
                         </div>
                       ))}
                     </section>
+
+                    {/* Account Management Section (Admin Only) */}
+                    {isAdmin && (
+                      <section className="space-y-4 pt-4 border-t border-border-color">
+                        <div className="flex items-center justify-between border-b border-border-color pb-2">
+                          <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><Users size={14} />계정 관리 (공유용)</h4>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="text" placeholder="아이디 (예: user1)" className="h-9 px-3 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color" value={newUserId} onChange={(e) => setNewUserId(e.target.value)} />
+                          <input type="text" placeholder="비밀번호" className="h-9 px-3 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color" value={newUserPw} onChange={(e) => setNewUserPw(e.target.value)} />
+                        </div>
+                        <button onClick={createNewAccount} className="w-full py-2 bg-accent-color text-white rounded-lg text-xs font-bold shadow-sm hover:bg-blue-700 transition-colors">새 계정 생성</button>
+                        
+                        <div className="space-y-2 pt-2">
+                          <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider">생성된 계정 목록</p>
+                          <div className="divide-y divide-border-color border border-border-color rounded-xl overflow-hidden">
+                            {registeredUsers.map(ru => (
+                              <div key={ru.id} className="flex items-center justify-between p-3 bg-gray-50/50">
+                                <div>
+                                  <p className="text-xs font-bold text-text-main">{ru.id}</p>
+                                  <p className="text-[9px] text-text-muted">{ru.role === 'admin' ? '관리자' : '일반 사용자'}</p>
+                                </div>
+                                {ru.id !== 'admin' && (
+                                  <button onClick={() => deleteAccount(ru.id, ru.id)} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                                )}
+                              </div>
+                            ))}
+                            {registeredUsers.length === 0 && <p className="p-4 text-center text-[10px] text-text-muted italic">생성된 계정이 없습니다.</p>}
+                          </div>
+                        </div>
+                      </section>
+                    )}
                   </div>
                 )}
                 <div className="bg-white rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm">
@@ -1027,6 +1177,95 @@ export default function App() {
         </nav>
       </div>
       <AnimatePresence>{showNotification && (<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-24 right-8 bg-text-main text-white px-6 py-4 rounded-2xl shadow-2xl z-[100] flex items-center gap-3 border border-gray-700"><Bell className="text-accent-color" size={18} /><span className="text-sm font-medium">{notificationMsg}</span></motion.div>)}</AnimatePresence>
+    </div>
+  );
+}
+
+// --- Components ---
+function LoginOverlay({ 
+  onLogin, 
+  onGoogleLogin,
+  id, 
+  setId, 
+  pw, 
+  setPw, 
+  isLoading,
+  error 
+}: any) {
+  return (
+    <div className="fixed inset-0 z-[200] bg-bg-primary flex items-center justify-center p-6 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-100/30 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-50/20 blur-[120px] rounded-full" />
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-[400px] bg-white rounded-[32px] border border-border-color p-8 lg:p-10 shadow-2xl shadow-blue-900/5 relative z-10"
+      >
+        <div className="flex flex-col items-center text-center mb-10">
+          <div className="w-16 h-16 bg-bg-primary rounded-2xl flex items-center justify-center border border-border-color mb-6 shadow-inner">
+            <img src="./app-logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+          </div>
+          <h1 className="text-2xl font-black text-text-main tracking-tight mb-2">EduScheduler</h1>
+          <p className="text-sm text-text-muted font-medium">스마트한 교육 일정 관리 시스템</p>
+        </div>
+
+        <form onSubmit={onLogin} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">아이디</label>
+            <input 
+              type="text" 
+              placeholder="아이디를 입력하세요" 
+              className="w-full h-12 px-4 bg-bg-primary border border-border-color rounded-2xl text-sm font-semibold outline-none focus:border-accent-color focus:ring-4 focus:ring-blue-50 transition-all"
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">비밀번호</label>
+            <input 
+              type="password" 
+              placeholder="••••••••" 
+              className="w-full h-12 px-4 bg-bg-primary border border-border-color rounded-2xl text-sm font-semibold outline-none focus:border-accent-color focus:ring-4 focus:ring-blue-50 transition-all"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              required
+            />
+          </div>
+          
+          {error && <p className="text-[11px] font-bold text-red-500 text-center animate-shake">{error}</p>}
+
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className="w-full h-12 bg-accent-color text-white rounded-2xl text-sm font-bold shadow-xl shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
+          >
+            {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : '로그인'}
+          </button>
+        </form>
+
+        {/* Optional Google Login Divider */}
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border-color" /></div>
+          <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest"><span className="px-3 bg-white text-text-muted/50">Admin Only</span></div>
+        </div>
+
+        <button 
+          onClick={onGoogleLogin}
+          className="w-full h-12 bg-white border border-border-color text-text-main rounded-2xl text-sm font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="" />
+          <span>구글 계정으로 로그인</span>
+        </button>
+
+        <p className="mt-8 text-center text-[10px] text-text-muted font-medium">
+          관리자로부터 부여받은 계정으로 로그인해 주세요.<br/>
+          분실 시 관리자에게 문의 바랍니다.
+        </p>
+      </motion.div>
     </div>
   );
 }
