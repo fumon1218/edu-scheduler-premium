@@ -590,21 +590,21 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 w-full overflow-hidden">
                 {viewMode === 'list' ? (
-                  <div className="flex p-1 bg-white border border-border-color rounded-xl shrink-0 overflow-x-auto">
+                  <div className="flex-1 flex p-1 bg-white border border-border-color rounded-xl overflow-x-auto no-scrollbar scroll-smooth">
                     <button onClick={() => { setSelectedDay(null); }} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap", !selectedDay ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:text-text-main")}>전체</button>
                     {DAYS.map(day => (<button key={day} onClick={() => { setSelectedDay(day); }} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap", selectedDay === day ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:text-text-main")}>{day}요일</button>))}
                   </div>
                 ) : viewMode === 'calendar' || viewMode === 'teacher' ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button onClick={() => setBaseDate(subMonths(baseDate, 1))} className="p-2 bg-white border border-border-color rounded-lg hover:bg-gray-50 transition-colors"><ChevronLeft size={16} /></button>
                     <button onClick={() => setBaseDate(startOfToday())} className="px-4 py-1.5 bg-white border border-border-color rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors">오늘</button>
                     <button onClick={() => setBaseDate(addMonths(baseDate, 1))} className="p-2 bg-white border border-border-color rounded-lg hover:bg-gray-50 transition-colors"><ChevronRight size={16} /></button>
                   </div>
                 ) : null}
-                <div className="h-8 w-[1px] bg-border-color mx-1" />
-                <button onClick={() => setViewMode(prev => prev === 'list' ? 'calendar' : 'list')} className="bg-white border border-border-color rounded-xl hover:bg-gray-50 transition-colors text-text-main flex items-center gap-2 px-4 h-[40px] shadow-sm">
+                <div className="h-8 w-[1px] bg-border-color mx-1 shrink-0 hidden sm:block" />
+                <button onClick={() => setViewMode(prev => prev === 'list' ? 'calendar' : 'list')} className="bg-white border border-border-color rounded-xl hover:bg-gray-50 transition-colors text-text-main flex items-center gap-2 px-4 h-[40px] shadow-sm shrink-0">
                   {viewMode === 'list' ? <><CalendarDays size={16} className="text-accent-color" /><span className="text-xs font-bold whitespace-nowrap">달력 보기</span></> : <><LayoutList size={16} className="text-accent-color" /><span className="text-xs font-bold whitespace-nowrap">리스트 보기</span></>}
                 </button>
               </div>
