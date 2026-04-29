@@ -340,7 +340,29 @@ export default function App() {
     setLoginError('');
     try {
       const email = loginId.includes('@') ? loginId : `${loginId}@edu.com`;
-      await signInWithEmailAndPassword(auth, email, loginPw);
+      try {
+        await signInWithEmailAndPassword(auth, email, loginPw);
+      } catch (err: any) {
+        // Bootstrap: If trying to login as 'admin' and it fails, attempt to create it
+        if (loginId === 'admin') {
+          try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, loginPw);
+            const { setDoc } = await import('firebase/firestore');
+            await setDoc(doc(db, 'registered_users', userCredential.user.uid), {
+              id: 'admin',
+              email: email,
+              role: 'admin',
+              createdAt: serverTimestamp()
+            });
+            // Login successful after creation
+          } catch (createErr: any) {
+            // If creation also fails (e.g. already exists but wrong PW), throw original error
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
       setLoginId('');
       setLoginPw('');
     } catch (err: any) {
