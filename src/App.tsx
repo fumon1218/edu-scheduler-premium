@@ -815,7 +815,7 @@ export default function App() {
                     <button type="submit" className="w-full py-3 bg-accent-color text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] mt-2 disabled:bg-gray-400 disabled:shadow-none">{editingId ? '수정 완료' : '일정 추가하기'}</button>
                     {editingId && <button type="button" onClick={resetForm} className="w-full py-3 text-text-muted text-xs font-bold hover:text-text-main transition-colors">취소</button>}
                   </form>
-                </div>
+                </motion.div>
 
                 {isSettingsOpen && (
                   <div className="bg-white rounded-2xl border border-border-color p-6 shadow-sm animate-in fade-in slide-in-from-right-4 duration-300 space-y-8 max-h-[80vh] overflow-y-auto">
