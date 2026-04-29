@@ -3,7 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Edu-Scheduler Premium</title>
+    <script>
+      window.onerror = function(msg, url, line, col, error) {
+        var div = document.createElement('div');
+        div.style.position = 'fixed'; div.style.top = '0'; div.style.left = '0';
+        div.style.width = '100%'; div.style.height = '100%';
+        div.style.backgroundColor = 'white'; div.style.color = 'red';
+        div.style.padding = '20px'; div.style.zIndex = '99999';
+        div.style.overflow = 'auto'; div.style.fontSize = '12px';
+        div.innerHTML = '<h3>[Debug] Error Detected:</h3>' +
+                        '<p><b>Msg:</b> ' + msg + '</p>' +
+                        '<p><b>Line:</b> ' + line + ' <b>Col:</b> ' + col + '</p>' +
+                        '<pre>' + (error ? error.stack : 'No stack trace') + '</pre>' +
+                        '<button onclick="location.reload()" style="padding:10px; background:red; color:white; border:none; border-radius:5px;">새로고침</button>';
+        document.body.appendChild(div);
+        return false;
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>
