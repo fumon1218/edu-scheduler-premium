@@ -16,7 +16,8 @@ import {
   Settings,
   X,
   LayoutList,
-  CalendarDays
+  CalendarDays,
+  Camera
 } from 'lucide-react';
 import { 
   collection, 
@@ -39,11 +40,13 @@ import {
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  updateProfile,
   User 
 } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { auth, db } from './lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage } from './lib/firebase';
 import firebaseConfig from '../firebase-applet-config.json';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -162,6 +165,8 @@ export default function App() {
     target: '',
     teacherId: ''
   });
+
+  const [isUploading, setIsUploading] = useState(false);
 
   // --- Helpers ---
   const safeFormat = (date: any, fmt: string, options?: any) => {
@@ -389,6 +394,42 @@ export default function App() {
   };
 
   const handleLogout = async () => { await signOut(auth); };
+
+  const handleProfileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    
+    setIsUploading(true);
+    try {
+      const storageRef = ref(storage, `profiles/${user.uid}`);
+      await uploadBytes(storageRef, file);
+      const photoURL = await getDownloadURL(storageRef);
+      
+      await updateProfile(user, { photoURL });
+      await updateDoc(doc(db, 'registered_users', user.uid), { photoURL }).catch(() => {
+        // If doc doesn't exist, ignore
+      });
+      
+      // Update local user state to reflect changes immediately
+      setUser({ ...user, photoURL } as User);
+      showNotify('프로필 사진이 업데이트되었습니다.');
+    } catch (err) {
+      console.error(err);
+      showNotify('사진 업로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const scrollToNotifications = () => {
+    const el = document.getElementById('system-notifications');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+      // Pulse effect
+      el.classList.add('ring-2', 'ring-yellow-400');
+      setTimeout(() => el?.classList.remove('ring-2', 'ring-yellow-400'), 2000);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -654,9 +695,21 @@ export default function App() {
             <div className="flex items-center gap-3">
               {user && (
                 <div className="flex items-center gap-3">
-                  <div className="text-right hidden sm:block"><p className="text-sm font-semibold text-text-main">{user.displayName}</p><p className="text-[10px] text-text-muted uppercase font-bold">{isAdmin ? 'Admin' : 'Staff'}</p></div>
-                  <div className="w-8 h-8 rounded-full bg-gray-200 border border-border-color overflow-hidden">
-                    {user.photoURL ? <img src={user.photoURL} alt="" referrerPolicy="no-referrer" /> : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400">{user.displayName?.[0]}</div>}
+                  <div className="text-right hidden sm:block"><p className="text-sm font-semibold text-text-main">{user.displayName || user.email?.split('@')[0]}</p><p className="text-[10px] text-text-muted uppercase font-bold">{isAdmin ? 'Admin' : 'Staff'}</p></div>
+                  <div className="relative group">
+                    <div className="w-9 h-9 rounded-full bg-gray-100 border border-border-color overflow-hidden flex items-center justify-center shadow-inner">
+                      {isUploading ? (
+                        <div className="w-4 h-4 border-2 border-accent-color border-t-transparent rounded-full animate-spin" />
+                      ) : user.photoURL ? (
+                        <img src={user.photoURL} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-400 bg-gray-50">{user.displayName?.[0] || user.email?.[0]?.toUpperCase()}</div>
+                      )}
+                    </div>
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                      <Camera size={14} className="text-white" />
+                      <input type="file" accept="image/*" className="hidden" onChange={handleProfileUpload} />
+                    </label>
                   </div>
                 </div>
               )}
@@ -1119,7 +1172,7 @@ export default function App() {
                     )}
                   </div>
                 )}
-                <div className="bg-white rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm">
+                <div id="system-notifications" className="bg-white rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm transition-all duration-500">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Bell size={14} className="text-yellow-500" />시스템 알림</h4>
                     {isAdmin && (
