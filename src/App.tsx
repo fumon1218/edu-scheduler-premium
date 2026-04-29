@@ -434,8 +434,8 @@ export default function App() {
       {/* Sidebar */}
       <aside className="hidden lg:flex w-64 bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
         <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-border-color shadow-sm shrink-0">
-            <img src="./logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-border-color shadow-sm shrink-0 bg-white p-1">
+            <img src="./app-logo.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
           </div>
           <span className="font-bold text-lg tracking-tight text-accent-color">EduScheduler</span>
         </div>
@@ -446,10 +446,17 @@ export default function App() {
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
           <div onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
           
-          <div className="mt-auto pt-6 px-4">
+          <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
               <p className="text-xs font-black text-accent-color">Premium v1.2.0</p>
+            </div>
+            
+            <div className="rounded-xl overflow-hidden border border-border-color shadow-sm grayscale hover:grayscale-0 transition-all duration-500 cursor-help group">
+              <img src="./logo.png" alt="Diorama" className="w-full h-24 object-cover group-hover:scale-110 transition-transform duration-700" />
+              <div className="p-2 bg-white/80 backdrop-blur-sm">
+                <p className="text-[8px] font-bold text-text-muted text-center">강릉분원 디오라마</p>
+              </div>
             </div>
           </div>
         </nav>
