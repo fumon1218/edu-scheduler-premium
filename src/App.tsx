@@ -29,7 +29,7 @@ import {
   query, 
   orderBy, 
   Timestamp,
-  getDocFromServer,
+  getDoc,
   serverTimestamp,
   setDoc
 } from 'firebase/firestore';
@@ -166,6 +166,7 @@ export default function App() {
     teacherId: ''
   });
 
+  const [isAuthInitialCheckDone, setIsAuthInitialCheckDone] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   // --- Helpers ---
@@ -203,16 +204,22 @@ export default function App() {
           setIsAdmin(true);
         } else {
           // Check Firestore for role
-          const userDoc = await getDocFromServer(doc(db, 'registered_users', u.uid));
-          if (userDoc.exists() && userDoc.data().role === 'admin') {
-            setIsAdmin(true);
-          } else {
+          try {
+            const userDoc = await getDoc(doc(db, 'registered_users', u.uid));
+            if (userDoc.exists()) {
+              setIsAdmin(userDoc.data().role === 'admin');
+            } else {
+              setIsAdmin(false);
+            }
+          } catch (e) {
+            console.error("Role check error:", e);
             setIsAdmin(false);
           }
         }
       } else {
         setIsAdmin(false);
       }
+      setIsAuthInitialCheckDone(true);
     });
     return () => unsubscribe();
   }, []);
@@ -605,6 +612,33 @@ export default function App() {
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 3000);
   };
+
+  if (!isAuthInitialCheckDone) {
+    return (
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-[1000]">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="flex flex-col items-center"
+        >
+          <div className="w-20 h-20 bg-accent-color rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-200 mb-6 animate-pulse">
+            <CalendarDays size={40} className="text-white" />
+          </div>
+          <h2 className="text-xl font-bold text-text-main tracking-tight">EduScheduler</h2>
+          <p className="text-sm text-text-muted mt-2">시스템 초기화 중...</p>
+          <div className="mt-8 w-48 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <motion.div 
+              initial={{ x: "-100%" }}
+              animate={{ x: "100%" }}
+              transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+              className="w-full h-full bg-accent-color"
+            />
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
