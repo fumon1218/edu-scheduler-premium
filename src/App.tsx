@@ -29,7 +29,8 @@ import {
   orderBy, 
   Timestamp,
   getDocFromServer,
-  serverTimestamp
+  serverTimestamp,
+  setDoc
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -347,7 +348,6 @@ export default function App() {
         if (loginId === 'admin') {
           try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, loginPw);
-            const { setDoc } = await import('firebase/firestore');
             await setDoc(doc(db, 'registered_users', userCredential.user.uid), {
               id: 'admin',
               email: email,
