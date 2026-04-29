@@ -652,8 +652,23 @@ export default function App() {
                         const daySchedules = filteredSchedules.filter(s => s.date === dateStr);
                         return (
                           <div key={idx} className={cn("p-2 space-y-2 min-h-[400px]", !safeIsSameMonth(dayDate, baseDate) ? "bg-gray-50/30" : "bg-white")}>
-                            {isAdmin && viewMode !== 'teacher' && (
-                              <button onClick={() => { setFormData({ ...formData, date: dateStr, day: safeFormat(dayDate, 'EEE', { locale: ko })[0] }); setIsEditing(false); setEditingId(null); }} className="w-full py-1.5 border border-dashed border-gray-200 rounded-lg text-gray-300 hover:text-accent-color hover:border-accent-color transition-all text-xs flex items-center justify-center gap-1 group"><Plus size={10} /></button>
+                            {isAdmin && (
+                              <button 
+                                onClick={() => { 
+                                  setFormData({ 
+                                    ...formData, 
+                                    date: dateStr, 
+                                    day: safeFormat(dayDate, 'EEE', { locale: ko })[0],
+                                    teacherId: viewMode === 'teacher' ? selectedTeacherId : formData.teacherId 
+                                  }); 
+                                  setEditingId(null);
+                                  document.getElementById('schedule-form')?.scrollIntoView({ behavior: 'smooth' });
+                                  setTimeout(() => document.getElementById('program-input')?.focus(), 100);
+                                }} 
+                                className="w-full py-1.5 border border-dashed border-gray-200 rounded-lg text-gray-300 hover:text-accent-color hover:border-accent-color transition-all text-xs flex items-center justify-center gap-1 group"
+                              >
+                                <Plus size={10} />
+                              </button>
                             )}
                             {daySchedules.map(s => (<motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} key={s.id} onClick={() => handleEdit(s)} className="p-2 rounded-xl border border-border-color bg-bg-primary hover:border-accent-color hover:shadow-md transition-all cursor-pointer group relative"><div className="text-[9px] font-bold text-accent-color mb-0.5">{s.startTime}</div><h4 className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate">{s.program}</h4><div className="text-[9px] text-text-muted truncate opacity-80">{s.location}</div>{viewMode !== 'teacher' && <div className="text-[8px] font-bold text-gray-400 mt-1">{s.teacherName}</div>}</motion.div>))}
                           </div>
@@ -734,8 +749,13 @@ export default function App() {
                 )}
               </div>
 
-              <div className="space-y-6">
-                <div className="bg-white rounded-2xl border border-border-color p-6 shadow-sm relative overflow-hidden">
+              <div className="space-y-6" id="schedule-form">
+                <motion.div 
+                  key={editingId ? 'edit' : 'new'}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="bg-white rounded-2xl border border-border-color p-6 shadow-sm relative overflow-hidden"
+                >
                   <h3 className="text-sm font-bold text-text-main uppercase mb-6 flex items-center gap-2"><div className="w-1.5 h-4 bg-accent-color rounded-full" />{editingId ? '일정 수정' : '신규 일정 등록'}</h3>
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1.5">
@@ -749,7 +769,15 @@ export default function App() {
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">프로그램 명</label>
                       <div className="relative">
-                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.program} onChange={(e) => setFormData({...formData, program: e.target.value})}>{programs.map(p => <option key={p} value={p}>{p}</option>)}</select>
+                        <select 
+                          id="program-input"
+                          required 
+                          className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" 
+                          value={formData.program} 
+                          onChange={(e) => setFormData({...formData, program: e.target.value})}
+                        >
+                          {programs.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
                       </div>
                     </div>
