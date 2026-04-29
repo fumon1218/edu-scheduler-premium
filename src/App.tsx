@@ -452,11 +452,19 @@ export default function App() {
               <p className="text-xs font-black text-accent-color">Premium v1.2.0</p>
             </div>
             
-            <div className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-help group">
-              <img src="./logo.png" alt="Diorama" className="w-full h-24 object-cover group-hover:scale-110 transition-transform duration-700" />
-              <div className="p-2 bg-white/80 backdrop-blur-sm">
-                <p className="text-[8px] font-bold text-text-muted text-center">강릉분원 디오라마</p>
-              </div>
+            <div className="space-y-3">
+              {[
+                { name: '강릉분원', src: './logo.png' },
+                { name: '춘천본원', src: './logo-chuncheon.jpg' },
+                { name: '원주분원', src: './logo-wonju.jpg' }
+              ].map(diorama => (
+                <div key={diorama.name} className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-help group bg-white">
+                  <img src={diorama.src} alt={diorama.name} className="w-full h-20 object-cover group-hover:scale-110 transition-transform duration-700" />
+                  <div className="p-1.5 bg-white/80 backdrop-blur-sm border-t border-border-color/30">
+                    <p className="text-[8px] font-bold text-text-muted text-center">{diorama.name} 디오라마</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </nav>
