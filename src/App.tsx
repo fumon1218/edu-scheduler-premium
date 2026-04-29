@@ -367,7 +367,16 @@ export default function App() {
       setLoginPw('');
     } catch (err: any) {
       console.error(err);
-      setLoginError('아이디 또는 비밀번호가 일치하지 않습니다.');
+      const errorCode = err.code || 'unknown';
+      let message = '아이디 또는 비밀번호가 일치하지 않습니다.';
+      if (errorCode === 'auth/operation-not-allowed') {
+        message = '로그인 설정 오류: Firebase 콘솔에서 이메일 로그인을 활성화해주세요.';
+      } else if (errorCode === 'auth/network-request-failed') {
+        message = '네트워크 오류가 발생했습니다.';
+      } else if (errorCode !== 'auth/invalid-credential' && errorCode !== 'auth/wrong-password' && errorCode !== 'auth/user-not-found') {
+        message = `오류 발생: ${errorCode}`;
+      }
+      setLoginError(message);
     } finally {
       setIsLoginLoading(false);
     }
