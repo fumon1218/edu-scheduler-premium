@@ -40,7 +40,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from './lib/firebase';
 import { cn } from './lib/utils';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { 
   format, 
@@ -430,8 +430,19 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-bg-primary overflow-hidden font-sans">
-      {/* Sidebar */}
+    <div className="flex h-screen bg-bg-primary overflow-hidden font-sans select-none">
+      {/* Mobile Header */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-border-color z-40 px-4 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <img src="./app-logo.png" alt="Logo" className="w-7 h-7 object-contain" />
+          <span className="font-bold text-base tracking-tight text-accent-color">EduScheduler</span>
+        </div>
+        <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className="p-2 text-text-muted hover:text-accent-color transition-colors">
+          <Settings size={20} />
+        </button>
+      </header>
+
+      {/* Sidebar (Desktop) */}
       <aside className="hidden lg:flex w-64 bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
         <div className="flex items-center gap-3 mb-10">
           <div className="w-10 h-10 rounded-xl overflow-hidden border border-border-color shadow-sm shrink-0 bg-white p-1">
@@ -502,11 +513,14 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-              <div className="flex items-center gap-6">
-                <div className="relative">
+        {/* Content Viewport */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-10 pb-32 lg:pb-10 bg-[#FAFAFB]">
+          <div className="max-w-[1400px] mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 lg:gap-12">
+              <div className="lg:col-span-3">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 lg:mb-12">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+                    <div className="relative">
                   <h2 
                     onClick={() => (viewMode === 'calendar' || viewMode === 'teacher') && setIsDatePickerOpen(!isDatePickerOpen)} 
                     className={cn(
@@ -570,7 +584,7 @@ export default function App() {
                   </AnimatePresence>
                 </div>
                 {(viewMode === 'calendar' || viewMode === 'teacher') && (
-                  <div className="flex items-center gap-2 px-1 py-1 bg-white border border-border-color rounded-xl h-fit">
+                  <div className="flex items-center gap-2 px-1 py-1 bg-white border border-border-color rounded-xl h-fit shrink-0">
                     <button onClick={() => setCalendarView('week')} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-all", calendarView === 'week' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:text-text-main")}>주간</button>
                     <button onClick={() => setCalendarView('month')} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-all", calendarView === 'month' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:text-text-main")}>월간</button>
                   </div>
@@ -971,11 +985,48 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <AnimatePresence>{showNotification && (<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-8 right-8 bg-text-main text-white px-6 py-4 rounded-2xl shadow-2xl z-[100] flex items-center gap-3 border border-gray-700"><Bell className="text-accent-color" size={18} /><span className="text-sm font-medium">{notificationMsg}</span></motion.div>)}</AnimatePresence>
+
+        {/* Mobile Bottom Navigation Bar */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-border-color z-[100] px-6 py-2 pb-safe flex items-center justify-between shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+          <button onClick={() => { setViewMode('calendar'); setCalendarView('month'); }} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'calendar' && calendarView === 'month' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
+            <CalendarDays size={20} strokeWidth={2.5} />
+            <span className="text-[9px] font-black tracking-tighter">월간</span>
+          </button>
+          <button onClick={() => { setViewMode('calendar'); setCalendarView('week'); }} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'calendar' && calendarView === 'week' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
+            <LayoutList size={20} strokeWidth={2.5} />
+            <span className="text-[9px] font-black tracking-tighter">주간</span>
+          </button>
+          
+          <div className="flex-1 flex justify-center -mt-6">
+            <button 
+              onClick={() => {
+                setFormData({ ...formData, date: format(new Date(), 'yyyy-MM-dd'), day: format(new Date(), 'EEE', { locale: ko })[0] });
+                setEditingId(null);
+                document.getElementById('schedule-form')?.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => document.getElementById('program-input')?.focus(), 100);
+              }}
+              className="w-14 h-14 bg-accent-color text-white rounded-2xl shadow-xl shadow-blue-500/40 flex items-center justify-center border-4 border-white active:scale-90 transition-all group"
+            >
+              <Plus size={28} strokeWidth={3} className="group-active:rotate-90 transition-transform" />
+            </button>
+          </div>
+          
+          <button onClick={() => setViewMode('teacher')} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'teacher' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
+            <Users size={20} strokeWidth={2.5} />
+            <span className="text-[9px] font-black tracking-tighter">교사</span>
+          </button>
+          <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("flex flex-col items-center gap-1 transition-all flex-1", isSettingsOpen ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
+            <Settings size={20} strokeWidth={2.5} />
+            <span className="text-[9px] font-black tracking-tighter">설정</span>
+          </button>
+        </nav>
+      </div>
+      <AnimatePresence>{showNotification && (<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-24 right-8 bg-text-main text-white px-6 py-4 rounded-2xl shadow-2xl z-[100] flex items-center gap-3 border border-gray-700"><Bell className="text-accent-color" size={18} /><span className="text-sm font-medium">{notificationMsg}</span></motion.div>)}</AnimatePresence>
     </div>
   );
 }
