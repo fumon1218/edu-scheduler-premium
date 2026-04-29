@@ -192,9 +192,9 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        // Simple Admin Check: If ID is 'admin' or has '@edu.com' and is 'admin'
+        // Simple Admin Check: If ID starts with 'admin'
         const id = u.email?.split('@')[0];
-        if (id === 'admin') {
+        if (id?.startsWith('admin')) {
           setIsAdmin(true);
         } else {
           // Check Firestore for role
@@ -340,23 +340,23 @@ export default function App() {
     setIsLoginLoading(true);
     setLoginError('');
     try {
-      const email = loginId.includes('@') ? loginId : `${loginId}@edu.com`;
+      const email = loginId.includes('@') ? loginId : `${loginId}@edu-admin.com`;
       try {
         await signInWithEmailAndPassword(auth, email, loginPw);
       } catch (err: any) {
-        // Bootstrap: If trying to login as 'admin' and it fails, attempt to create it
-        if (loginId === 'admin') {
+        // Bootstrap: If trying to login as an admin-prefixed account and it fails, attempt to create it
+        if (loginId.startsWith('admin')) {
           try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, loginPw);
             await setDoc(doc(db, 'registered_users', userCredential.user.uid), {
-              id: 'admin',
+              id: loginId,
               email: email,
               role: 'admin',
               createdAt: serverTimestamp()
             });
             // Login successful after creation
           } catch (createErr: any) {
-            // If creation also fails (e.g. already exists but wrong PW), throw original error
+            // If creation also fails, throw original error
             throw err;
           }
         } else {
