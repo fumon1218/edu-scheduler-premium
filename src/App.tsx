@@ -445,6 +445,13 @@ export default function App() {
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
           <div onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
+          
+          <div className="mt-auto pt-6 px-4">
+            <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
+              <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
+              <p className="text-xs font-black text-accent-color">Premium v1.2.0</p>
+            </div>
+          </div>
         </nav>
 
         <div className="pt-6 border-t border-border-color">
