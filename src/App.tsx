@@ -354,10 +354,10 @@ export default function App() {
               role: 'admin',
               createdAt: serverTimestamp()
             });
-            // Login successful after creation
           } catch (createErr: any) {
-            // If creation also fails, throw original error
-            throw err;
+            console.error("Bootstrap error:", createErr);
+            // If creation fails, throw the creation error instead to see why it's failing
+            throw createErr;
           }
         } else {
           throw err;
@@ -366,16 +366,20 @@ export default function App() {
       setLoginId('');
       setLoginPw('');
     } catch (err: any) {
-      console.error(err);
+      console.error("Login process error:", err);
       const errorCode = err.code || 'unknown';
-      let message = '아이디 또는 비밀번호가 일치하지 않습니다.';
+      let message = `로그인 오류: ${errorCode}`;
+      
       if (errorCode === 'auth/operation-not-allowed') {
         message = '로그인 설정 오류: Firebase 콘솔에서 이메일 로그인을 활성화해주세요.';
+      } else if (errorCode === 'auth/unauthorized-domain') {
+        message = '도메인 허용 오류: Firebase 콘솔 [설정 > 승인된 도메인]에 fumon1218.github.io를 추가해주세요.';
       } else if (errorCode === 'auth/network-request-failed') {
         message = '네트워크 오류가 발생했습니다.';
-      } else if (errorCode !== 'auth/invalid-credential' && errorCode !== 'auth/wrong-password' && errorCode !== 'auth/user-not-found') {
-        message = `오류 발생: ${errorCode}`;
+      } else if (errorCode === 'auth/invalid-credential' || errorCode === 'auth/wrong-password') {
+        message = '아이디 또는 비밀번호가 일치하지 않습니다.';
       }
+      
       setLoginError(message);
     } finally {
       setIsLoginLoading(false);
