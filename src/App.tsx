@@ -611,7 +611,7 @@ export default function App() {
             </div>
 
             {(viewMode === 'calendar' || viewMode === 'teacher') && calendarView === 'week' && (
-              <div className="flex p-1 bg-white border border-border-color rounded-xl mb-6 w-fit mx-auto shadow-sm overflow-x-auto">
+              <div className="flex p-1 bg-white border border-border-color rounded-xl mb-6 w-full sm:w-fit mx-auto shadow-sm overflow-x-auto no-scrollbar">
                 {weeksOfCurrentMonth.map((week, idx) => (
                   <button key={idx} onClick={() => setSelectedWeekIndex(idx)} className={cn("px-6 py-2 rounded-lg text-sm font-bold transition-all flex flex-col items-center min-w-[100px]", selectedWeekIndex === idx ? "bg-accent-color text-white shadow-md scale-105" : "text-text-muted hover:text-text-main")}>
                     <span>{idx + 1}주차</span>
@@ -624,7 +624,7 @@ export default function App() {
             )}
 
             {viewMode === 'teacher' && (
-              <div className="flex p-1 bg-white border border-border-color rounded-xl mb-6 w-fit mx-auto shadow-sm overflow-x-auto">
+              <div className="flex p-1 bg-white border border-border-color rounded-xl mb-6 w-full sm:w-fit mx-auto shadow-sm overflow-x-auto no-scrollbar">
                 {teachers.map((teacher) => (
                   <button key={teacher.id} onClick={() => setSelectedTeacherId(teacher.id)} className={cn("px-6 py-2 rounded-lg text-sm font-bold transition-all min-w-[100px]", selectedTeacherId === teacher.id ? "bg-blue-600 text-white shadow-md" : "text-text-muted hover:text-text-main")}>
                     {teacher.name}
