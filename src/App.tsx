@@ -168,6 +168,7 @@ export default function App() {
 
   const [isAuthInitialCheckDone, setIsAuthInitialCheckDone] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [appName, setAppName] = useState('EduScheduler');
 
   // --- Helpers ---
   const safeFormat = (date: any, fmt: string, options?: any) => {
@@ -219,6 +220,17 @@ export default function App() {
       } else {
         setIsAdmin(false);
       }
+      
+      // Fetch App Settings
+      try {
+        const appConfig = await getDoc(doc(db, 'settings', 'app_config'));
+        if (appConfig.exists()) {
+          setAppName(appConfig.data().appName || 'EduScheduler');
+        }
+      } catch (err) {
+        console.error("App config fetch error:", err);
+      }
+
       setIsAuthInitialCheckDone(true);
     });
     return () => unsubscribe();
@@ -625,7 +637,7 @@ export default function App() {
           <div className="w-20 h-20 bg-accent-color rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-200 mb-6 animate-pulse">
             <CalendarDays size={40} className="text-white" />
           </div>
-          <h2 className="text-xl font-bold text-text-main tracking-tight">EduScheduler</h2>
+          <h2 className="text-xl font-bold text-text-main tracking-tight">{appName}</h2>
           <p className="text-sm text-text-muted mt-2">시스템 초기화 중...</p>
           <div className="mt-8 w-48 h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <motion.div 
@@ -643,14 +655,11 @@ export default function App() {
   if (!user) {
     return (
       <LoginOverlay 
-        onLogin={handleIdPasswordLogin}
+        onLogin={handleIdPasswordLogin} 
         onGoogleLogin={handleGoogleLogin}
-        id={loginId}
-        setId={setLoginId}
-        pw={loginPw}
-        setPw={setLoginPw}
         isLoading={isLoginLoading}
         error={loginError}
+        appName={appName}
       />
     );
   }
@@ -661,7 +670,7 @@ export default function App() {
       <header className="lg:hidden fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-border-color z-40 px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src="./app-logo.png" alt="Logo" className="w-7 h-7 object-contain" />
-          <span className="font-bold text-base tracking-tight text-accent-color">EduScheduler</span>
+          <span className="font-bold text-base tracking-tight text-accent-color">{appName}</span>
         </div>
         <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className="p-2 text-text-muted hover:text-accent-color transition-colors">
           <Settings size={20} />
@@ -670,11 +679,11 @@ export default function App() {
 
       {/* Sidebar (Desktop) */}
       <aside className="hidden lg:flex w-64 bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-border-color shadow-sm shrink-0 bg-white p-1">
-            <img src="./app-logo.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
+        <div className="flex items-center gap-3 px-2 mb-10">
+          <div className="w-10 h-10 bg-accent-color rounded-xl flex items-center justify-center shadow-lg shadow-blue-100">
+            <CalendarDays size={20} className="text-white" />
           </div>
-          <span className="font-bold text-lg tracking-tight text-accent-color">EduScheduler</span>
+          <h1 className="text-xl font-black text-accent-color tracking-tighter">{appName}</h1>
         </div>
         
         <nav className="flex-1 space-y-1">
@@ -1099,7 +1108,7 @@ export default function App() {
                     <button type="submit" className="w-full py-3 bg-accent-color text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] mt-2 disabled:bg-gray-400 disabled:shadow-none">{editingId ? '수정 완료' : '일정 추가하기'}</button>
                     {editingId && (
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => handleDelete(editingId)} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl text-xs font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2 mt-2">
+                        <button type="button" onClick={() => deleteSchedule(editingId)} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl text-xs font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2 mt-2">
                           <Trash2 size={14} /> 일정 삭제
                         </button>
                         <button type="button" onClick={resetForm} className="flex-1 py-3 text-text-muted text-xs font-bold hover:text-text-main transition-colors mt-2">취소</button>
@@ -1115,8 +1124,35 @@ export default function App() {
                       <button onClick={() => setIsSettingsOpen(false)} className="text-text-muted hover:text-text-main"><X size={18} /></button>
                     </div>
 
+                    {/* App Config */}
+                    {isAdmin && (
+                      <section className="space-y-4">
+                        <div>
+                          <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><Settings size={14} />앱 설정</h4>
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-text-muted uppercase ml-1">앱 명칭 변경</label>
+                            <div className="flex gap-2">
+                              <input 
+                                type="text" 
+                                value={appName} 
+                                onChange={(e) => setAppName(e.target.value)}
+                                className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
+                                placeholder="앱 이름을 입력하세요"
+                              />
+                              <button 
+                                onClick={() => handleUpdateAppName(appName)}
+                                className="px-3 h-9 bg-accent-color text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors"
+                              >
+                                저장
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    )}
+
                     {/* Teacher Management Section */}
-                    <section className="space-y-4">
+                    <section className="space-y-4 pt-4 border-t border-border-color">
                       <div className="flex items-center justify-between border-b border-border-color pb-2">
                         <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><Users size={14} />교사 명단 관리</h4>
                       </div>
@@ -1131,12 +1167,11 @@ export default function App() {
                             <button onClick={() => deleteTeacher(t.id)} className="text-blue-300 hover:text-red-500 transition-colors"><X size={12} /></button>
                           </div>
                         ))}
-                        {teachers.length === 0 && <p className="text-[10px] text-text-muted italic py-2">등록된 교사가 없습니다.</p>}
                       </div>
                     </section>
 
                     {/* Category Management Section */}
-                    <section className="space-y-6">
+                    <section className="space-y-6 pt-4 border-t border-border-color">
                       <div className="flex items-center justify-between border-b border-border-color pb-2">
                         <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><LayoutList size={14} />항목 카테고리 관리</h4>
                       </div>
@@ -1176,17 +1211,35 @@ export default function App() {
                     {/* Account Management Section (Admin Only) */}
                     {isAdmin && (
                       <section className="space-y-4 pt-4 border-t border-border-color">
-                        <div className="flex items-center justify-between border-b border-border-color pb-2">
-                          <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><Users size={14} />계정 관리 (공유용)</h4>
+                        <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><Users size={14} />계정 관리 (공유용)</h4>
+                        <div className="flex flex-col gap-3">
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              placeholder="ID (예: user1)" 
+                              className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
+                              id="new-account-id"
+                            />
+                            <input 
+                              type="password" 
+                              placeholder="PW (6자 이상)" 
+                              className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
+                              id="new-account-pw"
+                            />
+                            <button 
+                              onClick={() => {
+                                const id = (document.getElementById('new-account-id') as HTMLInputElement).value;
+                                const pw = (document.getElementById('new-account-pw') as HTMLInputElement).value;
+                                if (id && pw) createNewAccount(id, pw);
+                              }}
+                              className="px-3 h-9 bg-text-main text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
+                            >
+                              추가
+                            </button>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <input type="text" placeholder="아이디 (예: user1)" className="h-9 px-3 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color" value={newUserId} onChange={(e) => setNewUserId(e.target.value)} />
-                          <input type="text" placeholder="비밀번호" className="h-9 px-3 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color" value={newUserPw} onChange={(e) => setNewUserPw(e.target.value)} />
-                        </div>
-                        <button onClick={createNewAccount} className="w-full py-2 bg-accent-color text-white rounded-lg text-xs font-bold shadow-sm hover:bg-blue-700 transition-colors">새 계정 생성</button>
                         
                         <div className="space-y-2 pt-2">
-                          <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider">생성된 계정 목록</p>
                           <div className="divide-y divide-border-color border border-border-color rounded-xl overflow-hidden">
                             {registeredUsers.map(ru => (
                               <div key={ru.id} className="flex items-center justify-between p-3 bg-gray-50/50">
@@ -1199,7 +1252,6 @@ export default function App() {
                                 )}
                               </div>
                             ))}
-                            {registeredUsers.length === 0 && <p className="p-4 text-center text-[10px] text-text-muted italic">생성된 계정이 없습니다.</p>}
                           </div>
                         </div>
                       </section>
@@ -1213,6 +1265,9 @@ export default function App() {
                       <button onClick={() => { setEditingNotifId('new'); setNotifForm({ title: '', content: '' }); }} className="p-1 hover:bg-yellow-50 rounded-lg text-yellow-600 transition-colors"><Plus size={14} /></button>
                     )}
                   </div>
+                  <p className="text-xs text-text-muted leading-relaxed mb-4">
+                    에듀 스케줄러 프리미엄 버전을 이용해 주셔서 감사합니다. {appName}의 모든 일정은 실시간으로 동기화됩니다.
+                  </p>
                   <div className="space-y-3">
                     {editingNotifId === 'new' && (
                       <div className="p-3 bg-yellow-50/50 rounded-lg border border-yellow-200 space-y-2">
