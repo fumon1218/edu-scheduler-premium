@@ -31,8 +31,10 @@ import {
   orderBy, 
   Timestamp,
   getDoc,
+  getDocs,
   serverTimestamp,
-  setDoc
+  setDoc,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -594,6 +596,49 @@ export default function App() {
     }
   };
 
+  const deleteTeacher = async (id: string) => {
+    const teacher = teachers.find(t => t.id === id);
+    if (!window.confirm(`'${teacher?.name}' 교사를 명단에서 삭제하시겠습니까?`)) return;
+    try {
+      await deleteDoc(doc(db, 'teachers', id));
+      showNotify('교사가 삭제되었습니다.');
+    } catch (err) {
+      showNotify('교사 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const updateTeacher = async (id: string, newName: string) => {
+    const trimmedName = newName.trim();
+    if (!trimmedName) return;
+    const teacher = teachers.find(t => t.id === id);
+    if (teacher?.name === trimmedName) return;
+
+    try {
+      // 1. Update teacher document
+      await updateDoc(doc(db, 'teachers', id), { name: trimmedName });
+      
+      // 2. Update denormalized name in all schedules
+      const q = query(collection(db, 'schedules'));
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      
+      let count = 0;
+      snapshot.forEach(d => {
+        if (d.data().teacherId === id) {
+          batch.update(d.ref, { teacherName: trimmedName });
+          count++;
+        }
+      });
+      
+      if (count > 0) await batch.commit();
+      
+      showNotify('교사 정보가 수정되었습니다.');
+    } catch (err) {
+      console.error(err);
+      showNotify('교사 수정 중 오류가 발생했습니다.');
+    }
+  };
+
   // Account Management Actions
   const createNewAccount = async () => {
     if (!newUserId.trim() || !newUserPw.trim()) return;
@@ -772,7 +817,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.0</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.1</p>
             </div>
             
             <div className="space-y-3">
@@ -1332,9 +1377,22 @@ export default function App() {
                       </div>
                       <div className="flex flex-wrap gap-2 pt-1">
                         {teachers.map(t => (
-                          <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 border border-blue-100 rounded-full group transition-all hover:bg-blue-50">
-                            <span className="text-[11px] font-bold text-accent-color">{t.name}</span>
-                            <button onClick={() => deleteTeacher(t.id)} className="text-blue-300 hover:text-red-500 transition-colors"><X size={12} /></button>
+                          <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 border border-blue-100 rounded-full group transition-all hover:border-accent-color">
+                            <input 
+                              type="text"
+                              defaultValue={t.name}
+                              className="text-[11px] font-bold text-accent-color bg-transparent border-none outline-none focus:ring-1 focus:ring-accent-color rounded px-1 w-20"
+                              onBlur={(e) => updateTeacher(t.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  updateTeacher(t.id, (e.target as HTMLInputElement).value);
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
+                            />
+                            <button onClick={() => deleteTeacher(t.id)} className="text-blue-300 hover:text-red-500 transition-colors opacity-40 group-hover:opacity-100">
+                              <X size={12} />
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -1634,7 +1692,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.7.0 - 카테고리 항목 직접 수정 및 삭제 확인 기능 추가
+          v2.7.1 - 교사 명단 직접 수정 기능 추가 및 데이터 동기화
         </p>
       </motion.div>
     </div>
