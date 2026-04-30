@@ -763,7 +763,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color">Premium v1.2.0</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.6.9</p>
             </div>
             
             <div className="space-y-3">
