@@ -1191,33 +1191,7 @@ export default function App() {
                       <button onClick={() => setIsSettingsOpen(false)} className="text-text-muted hover:text-text-main"><X size={18} /></button>
                     </div>
 
-                    {/* My Profile */}
-                    <section className="space-y-4">
-                      <div>
-                        <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><User size={14} />내 프로필 설정</h4>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-text-muted uppercase ml-1">표시 이름 변경</label>
-                          <div className="flex gap-2">
-                            <input 
-                              type="text" 
-                              defaultValue={user.displayName || user.email?.split('@')[0]} 
-                              id="my-display-name"
-                              className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
-                              placeholder="사용할 이름을 입력하세요"
-                            />
-                            <button 
-                              onClick={() => {
-                                const newName = (document.getElementById('my-display-name') as HTMLInputElement).value;
-                                if (newName) handleUpdateDisplayName(newName);
-                              }}
-                              className="px-3 h-9 bg-accent-color text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors"
-                            >
-                              변경
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </section>
+
 
                     {/* App Config */}
                     {isAdmin && (
@@ -1259,6 +1233,32 @@ export default function App() {
                                   저장
                                 </button>
                               </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* My Profile - Moved here */}
+                        <div className="pt-4 border-t border-gray-50">
+                          <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><User size={14} />내 프로필 설정</h4>
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-text-muted uppercase ml-1">표시 이름 변경</label>
+                            <div className="flex gap-2">
+                              <input 
+                                type="text" 
+                                defaultValue={user.displayName || user.email?.split('@')[0]} 
+                                id="my-display-name"
+                                className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
+                                placeholder="사용할 이름을 입력하세요"
+                              />
+                              <button 
+                                onClick={() => {
+                                  const newName = (document.getElementById('my-display-name') as HTMLInputElement).value;
+                                  if (newName) handleUpdateDisplayName(newName);
+                                }}
+                                className="px-3 h-9 bg-accent-color text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors"
+                              >
+                                변경
+                              </button>
                             </div>
                           </div>
                         </div>
