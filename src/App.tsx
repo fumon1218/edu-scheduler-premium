@@ -1474,15 +1474,18 @@ export default function App() {
 function LoginOverlay({ 
   onLogin, 
   onGoogleLogin,
-  id, 
-  setId, 
-  pw, 
-  setPw, 
   isLoading,
   error,
   appName,
   appLogo
 }: any) {
+  const [localId, setLocalId] = useState('');
+  const [localPw, setLocalPw] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onLogin(localId, localPw);
+  };
   return (
     <div className="fixed inset-0 z-[200] bg-bg-primary flex items-center justify-center p-6 overflow-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -1503,15 +1506,15 @@ function LoginOverlay({
           <p className="text-sm text-text-muted font-medium">스마트한 교육 일정 관리 시스템</p>
         </div>
 
-        <form onSubmit={onLogin} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">아이디</label>
             <input 
               type="text" 
               placeholder="아이디를 입력하세요" 
               className="w-full h-12 px-4 bg-bg-primary border border-border-color rounded-2xl text-sm font-semibold outline-none focus:border-accent-color focus:ring-4 focus:ring-blue-50 transition-all"
-              value={id}
-              onChange={(e) => setId(e.target.value)}
+              value={localId}
+              onChange={(e) => setLocalId(e.target.value)}
               required
             />
           </div>
@@ -1521,8 +1524,8 @@ function LoginOverlay({
               type="password" 
               placeholder="••••••••" 
               className="w-full h-12 px-4 bg-bg-primary border border-border-color rounded-2xl text-sm font-semibold outline-none focus:border-accent-color focus:ring-4 focus:ring-blue-50 transition-all"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
+              value={localPw}
+              onChange={(e) => setLocalPw(e.target.value)}
               required
             />
           </div>
