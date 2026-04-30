@@ -730,7 +730,7 @@ export default function App() {
       {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-border-color z-40 px-4 h-14 flex items-center justify-between">
         <div 
-          onClick={() => { setView('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          onClick={() => { setViewMode('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           className="flex items-center gap-2 cursor-pointer"
         >
           <img src={appLogo} alt="Logo" className="w-7 h-7 object-contain" />
@@ -744,7 +744,7 @@ export default function App() {
       {/* Sidebar (Desktop) */}
       <aside className="hidden lg:flex w-64 bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
         <div 
-          onClick={() => { setView('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          onClick={() => { setViewMode('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           className="flex items-center gap-3 px-2 mb-10 cursor-pointer hover:opacity-80 transition-opacity"
         >
           <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-border-color overflow-hidden p-1">
