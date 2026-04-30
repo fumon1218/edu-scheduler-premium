@@ -817,16 +817,20 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.1</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.2</p>
             </div>
             
             <div className="space-y-3">
               {[
-                { name: '강릉분원', src: './logo.png' },
-                { name: '춘천본원', src: './logo-chuncheon.jpg' },
-                { name: '원주분원', src: './logo-wonju.jpg' }
+                { name: '강릉분원', src: './logo.png', url: 'https://www.gninjae.or.kr' },
+                { name: '춘천본원', src: './logo-chuncheon.jpg', url: 'https://jinro.gwe.go.kr' },
+                { name: '원주분원', src: './logo-wonju.jpg', url: 'https://wj.gwe.go.kr' }
               ].map(diorama => (
-                <div key={diorama.name} className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-help group bg-white">
+                <div 
+                  key={diorama.name} 
+                  onClick={() => window.open(diorama.url, '_blank')}
+                  className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-pointer group bg-white active:scale-95 transition-all"
+                >
                   <img src={diorama.src} alt={diorama.name} className="w-full h-20 object-cover group-hover:scale-110 transition-transform duration-700" />
                   <div className="p-1.5 bg-white/80 backdrop-blur-sm border-t border-border-color/30">
                     <p className="text-[8px] font-bold text-text-muted text-center">{diorama.name} 디오라마</p>
@@ -1692,7 +1696,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.7.1 - 교사 명단 직접 수정 기능 추가 및 데이터 동기화
+          v2.7.2 - 디오라마 클릭 시 각 기관 홈페이지 연동 기능 추가
         </p>
       </motion.div>
     </div>
