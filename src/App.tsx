@@ -763,7 +763,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.6.9</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.6.9.1</p>
             </div>
             
             <div className="space-y-3">
@@ -1310,6 +1310,7 @@ export default function App() {
                               </div>
                             </div>
                           </section>
+                        )}
 
                     {/* Teacher Management Section */}
                     <section className="space-y-4 pt-4 border-t border-border-color">
@@ -1608,7 +1609,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.6.9 - 사이드 설정 시트 및 테마 컬러 기능 적용
+          v2.6.9.1 - 빌드 문법 오류 수정 완료
         </p>
       </motion.div>
     </div>
