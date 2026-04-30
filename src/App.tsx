@@ -1186,85 +1186,130 @@ export default function App() {
                 </motion.div>
 
                 {isSettingsOpen && (
-                  <div className="bg-white rounded-2xl border border-border-color p-6 shadow-sm animate-in fade-in slide-in-from-right-4 duration-300 space-y-8 max-h-[80vh] overflow-y-auto">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-bold text-text-main uppercase tracking-tight flex items-center gap-2"><Settings size={16} className="text-accent-color" />시스템 설정</h3>
-                      <button onClick={() => setIsSettingsOpen(false)} className="text-text-muted hover:text-text-main"><X size={18} /></button>
-                    </div>
+                  <>
+                    {/* Backdrop */}
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setIsSettingsOpen(false)}
+                      className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[110]"
+                    />
+                    
+                    {/* Settings Side Sheet */}
+                    <motion.div 
+                      initial={{ x: '100%' }}
+                      animate={{ x: 0 }}
+                      exit={{ x: '100%' }}
+                      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                      className="fixed top-0 right-0 bottom-0 w-full max-w-[400px] bg-white shadow-2xl z-[120] flex flex-col border-l border-border-color"
+                    >
+                      <div className="flex items-center justify-between p-6 border-b border-border-color bg-gray-50/50">
+                        <h3 className="text-base font-black text-text-main uppercase tracking-tight flex items-center gap-2">
+                          <Settings size={20} className="text-accent-color" />
+                          시스템 설정
+                        </h3>
+                        <button 
+                          onClick={() => setIsSettingsOpen(false)} 
+                          className="p-2 hover:bg-white rounded-full text-text-muted hover:text-text-main transition-all shadow-sm"
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
 
-
-
-                    {/* App Config */}
-                    {isAdmin && (
-                      <section className="space-y-4">
-                        <div>
-                          <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><Settings size={14} />앱 설정</h4>
-                          <div className="grid grid-cols-1 gap-4">
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-bold text-text-muted uppercase ml-1">앱 로고 아이콘</label>
-                              <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm border border-border-color overflow-hidden p-1">
-                                  {isLogoUploading ? (
-                                    <div className="w-4 h-4 border-2 border-accent-color border-t-transparent rounded-full animate-spin" />
-                                  ) : (
-                                    <img src={appLogo} alt="Current Logo" className="w-full h-full object-contain" />
-                                  )}
+                      <div className="flex-1 overflow-y-auto p-6 space-y-10 pb-24">
+                        {/* App Config */}
+                        {isAdmin && (
+                          <section className="space-y-6">
+                            <div>
+                              <h4 className="text-xs font-black text-text-main flex items-center gap-2 mb-4">
+                                <Settings size={14} className="text-accent-color" />
+                                앱 브랜드 설정
+                              </h4>
+                              <div className="grid grid-cols-1 gap-6">
+                                <div className="space-y-3">
+                                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">앱 메인 컬러 (테마)</label>
+                                  <div className="flex flex-wrap gap-3 p-3 bg-gray-50 rounded-2xl border border-border-color">
+                                    {['#3b82f6', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#0f172a'].map(color => (
+                                      <button 
+                                        key={color}
+                                        onClick={() => {
+                                          document.documentElement.style.setProperty('--accent-color', color);
+                                          showNotify('테마 색상이 변경되었습니다.');
+                                        }}
+                                        className="w-8 h-8 rounded-full border-2 border-white shadow-sm transition-transform active:scale-90 hover:scale-110"
+                                        style={{ backgroundColor: color }}
+                                      />
+                                    ))}
+                                  </div>
                                 </div>
-                                <label className="flex-1">
-                                  <span className="inline-block px-3 py-1.5 bg-white border border-border-color rounded-lg text-[10px] font-bold text-text-main cursor-pointer hover:bg-gray-100 transition-colors">아이콘 변경</span>
-                                  <input type="file" accept="image/*" className="hidden" onChange={handleAppLogoUpload} />
-                                </label>
+                                <div className="space-y-3">
+                                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">앱 로고 아이콘</label>
+                                  <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-border-color">
+                                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-border-color overflow-hidden p-1">
+                                      {isLogoUploading ? (
+                                        <div className="w-5 h-5 border-2 border-accent-color border-t-transparent rounded-full animate-spin" />
+                                      ) : (
+                                        <img src={appLogo} alt="Current Logo" className="w-full h-full object-contain" />
+                                      )}
+                                    </div>
+                                    <label className="flex-1">
+                                      <span className="inline-block px-4 py-2 bg-white border border-border-color rounded-xl text-xs font-bold text-text-main cursor-pointer hover:bg-gray-100 transition-colors shadow-sm">아이콘 변경</span>
+                                      <input type="file" accept="image/*" className="hidden" onChange={handleAppLogoUpload} />
+                                    </label>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">앱 명칭 변경</label>
+                                  <div className="flex gap-2">
+                                    <input 
+                                      type="text" 
+                                      value={appName} 
+                                      onChange={(e) => setAppName(e.target.value)}
+                                      className="flex-1 h-11 px-4 bg-gray-50 border border-border-color rounded-2xl text-sm font-semibold outline-none focus:border-accent-color transition-all"
+                                      placeholder="앱 이름을 입력하세요"
+                                    />
+                                    <button 
+                                      onClick={() => handleUpdateAppName(appName)}
+                                      className="px-5 h-11 bg-accent-color text-white rounded-2xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-blue-500/20"
+                                    >
+                                      저장
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
                             </div>
 
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-bold text-text-muted uppercase ml-1">앱 명칭 변경</label>
-                              <div className="flex gap-2">
-                                <input 
-                                  type="text" 
-                                  value={appName} 
-                                  onChange={(e) => setAppName(e.target.value)}
-                                  className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
-                                  placeholder="앱 이름을 입력하세요"
-                                />
-                                <button 
-                                  onClick={() => handleUpdateAppName(appName)}
-                                  className="px-3 h-9 bg-accent-color text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors"
-                                >
-                                  저장
-                                </button>
+                            {/* My Profile - Integrated here */}
+                            <div className="pt-8 border-t border-gray-100">
+                              <h4 className="text-xs font-black text-text-main flex items-center gap-2 mb-4">
+                                <UserIcon size={14} className="text-accent-color" />
+                                내 프로필 설정
+                              </h4>
+                              <div className="space-y-3">
+                                <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">표시 이름 변경</label>
+                                <div className="flex gap-2">
+                                  <input 
+                                    type="text" 
+                                    defaultValue={user.displayName || user.email?.split('@')[0]} 
+                                    id="my-display-name"
+                                    className="flex-1 h-11 px-4 bg-gray-50 border border-border-color rounded-2xl text-sm font-semibold outline-none focus:border-accent-color transition-all"
+                                    placeholder="사용할 이름을 입력하세요"
+                                  />
+                                  <button 
+                                    onClick={() => {
+                                      const newName = (document.getElementById('my-display-name') as HTMLInputElement).value;
+                                      if (newName) handleUpdateDisplayName(newName);
+                                    }}
+                                    className="px-5 h-11 bg-text-main text-white rounded-2xl text-sm font-bold hover:bg-gray-800 transition-all shadow-lg"
+                                  >
+                                    변경
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </div>
-
-                        {/* My Profile - Moved here */}
-                        <div className="pt-4 border-t border-gray-50">
-                          <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><UserIcon size={14} />내 프로필 설정</h4>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-text-muted uppercase ml-1">표시 이름 변경</label>
-                            <div className="flex gap-2">
-                              <input 
-                                type="text" 
-                                defaultValue={user.displayName || user.email?.split('@')[0]} 
-                                id="my-display-name"
-                                className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
-                                placeholder="사용할 이름을 입력하세요"
-                              />
-                              <button 
-                                onClick={() => {
-                                  const newName = (document.getElementById('my-display-name') as HTMLInputElement).value;
-                                  if (newName) handleUpdateDisplayName(newName);
-                                }}
-                                className="px-3 h-9 bg-accent-color text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors"
-                              >
-                                변경
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </section>
-                    )}
+                          </section>
 
                     {/* Teacher Management Section */}
                     <section className="space-y-4 pt-4 border-t border-border-color">
@@ -1370,8 +1415,10 @@ export default function App() {
                           </div>
                         </div>
                       </section>
-                    )}
-                  </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
                 )}
                 <div id="system-notifications" className="bg-white rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm transition-all duration-500">
                   <div className="flex items-center justify-between mb-3">
@@ -1561,7 +1608,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.6.8 - 설정 메뉴 충돌 오류 수정
+          v2.6.9 - 사이드 설정 시트 및 테마 컬러 기능 적용
         </p>
       </motion.div>
     </div>
