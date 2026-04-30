@@ -813,9 +813,24 @@ export default function App() {
           <img src={appLogo} alt="Logo" className="w-7 h-7 object-contain" />
           <span className="font-bold text-base tracking-tight text-accent-color">{appName}</span>
         </div>
-        <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className="p-2 text-text-muted hover:text-accent-color transition-colors">
-          <Settings size={20} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={scrollToNotifications} className="p-2 text-text-muted hover:text-accent-color transition-colors relative">
+            <Bell size={20} />
+            <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+          </button>
+          <div 
+            onClick={() => setIsSettingsOpen(true)}
+            className="w-8 h-8 rounded-full border border-border-color overflow-hidden cursor-pointer ml-1"
+          >
+            {user?.photoURL ? (
+              <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-blue-50 flex items-center justify-center text-[10px] font-bold text-accent-color">
+                {user?.displayName?.slice(0, 1) || 'U'}
+              </div>
+            )}
+          </div>
+        </div>
       </header>
 
       {/* Sidebar (Desktop) */}
@@ -839,7 +854,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.4</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.5</p>
             </div>
             
             <div className="space-y-3">
@@ -1744,7 +1759,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.7.4 - 디오라마 링크 직접 관리 기능 추가 (관리자 전용)
+          v2.7.5 - 모바일 헤더 알림 및 프로필 숏컷 추가
         </p>
       </motion.div>
     </div>
