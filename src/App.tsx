@@ -139,6 +139,11 @@ export default function App() {
   const [programs, setPrograms] = useState<string[]>(DEFAULT_PROGRAMS);
   const [locations, setLocations] = useState<string[]>(DEFAULT_LOCATIONS);
   const [targets, setTargets] = useState<string[]>(DEFAULT_TARGETS);
+  const [dioramaUrls, setDioramaUrls] = useState<Record<string, string>>({
+    '강릉분원': '',
+    '춘천본원': '',
+    '원주분원': ''
+  });
   const [newCategoryItem, setNewCategoryItem] = useState({ type: '', value: '' });
 
   // System Notifications State
@@ -232,6 +237,7 @@ export default function App() {
         if (appConfig.exists()) {
           setAppName(appConfig.data().appName || 'EduScheduler');
           setAppLogo(appConfig.data().appLogo || './app-logo.png');
+          setDioramaUrls(appConfig.data().dioramaUrls || { '강릉분원': '', '춘천본원': '', '원주분원': '' });
         }
       } catch (err) {
         console.error("App config fetch error:", err);
@@ -500,6 +506,22 @@ export default function App() {
     } catch (err) {
       console.error(err);
       showNotify('변경 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleUpdateDioramaUrl = async (name: string, url: string) => {
+    if (!isAdmin) return;
+    try {
+      const newUrls = { ...dioramaUrls, [name]: url };
+      setDioramaUrls(newUrls);
+      await setDoc(doc(db, 'settings', 'app_config'), { 
+        dioramaUrls: newUrls,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      showNotify(`${name} 링크가 저장되었습니다.`);
+    } catch (err) {
+      console.error(err);
+      showNotify('저장 중 오류가 발생했습니다.');
     }
   };
 
@@ -817,7 +839,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.3</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.4</p>
             </div>
             
             <div className="space-y-3">
@@ -828,7 +850,14 @@ export default function App() {
               ].map(diorama => (
                 <div 
                   key={diorama.name} 
-                  onClick={() => showNotify(`${diorama.name} 홈페이지 준비 중입니다.`)}
+                  onClick={() => {
+                    const url = dioramaUrls[diorama.name];
+                    if (url && url.startsWith('http')) {
+                      window.open(url, '_blank');
+                    } else {
+                      showNotify(`${diorama.name} 홈페이지 준비 중입니다.`);
+                    }
+                  }}
                   className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-pointer group bg-white active:scale-95 transition-all"
                 >
                   <img src={diorama.src} alt={diorama.name} className="w-full h-20 object-cover group-hover:scale-110 transition-transform duration-700" />
@@ -1503,6 +1532,25 @@ export default function App() {
                           </div>
                         </div>
                       </section>
+                      
+                      {/* Diorama Link Management (Admin Only) */}
+                      <section className="space-y-4 pt-4 border-t border-border-color">
+                        <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><MapPin size={14} />디오라마 링크 관리</h4>
+                        <div className="space-y-3">
+                          {['강릉분원', '춘천본원', '원주분원'].map(name => (
+                            <div key={name} className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">{name} 링크</label>
+                              <input 
+                                type="text" 
+                                placeholder="https://..." 
+                                defaultValue={dioramaUrls[name]}
+                                onBlur={(e) => handleUpdateDioramaUrl(name, e.target.value)}
+                                className="w-full h-9 px-3 bg-gray-50 border border-border-color rounded-xl text-[11px] font-medium outline-none focus:border-accent-color transition-all"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </section>
                         )}
                       </div>
                     </motion.div>
@@ -1696,7 +1744,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.7.3 - 디오라마 클릭 시 준비 중 안내 메시지 표시 (홈페이지 구축 전)
+          v2.7.4 - 디오라마 링크 직접 관리 기능 추가 (관리자 전용)
         </p>
       </motion.div>
     </div>
