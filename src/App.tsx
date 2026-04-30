@@ -817,7 +817,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.2</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.3</p>
             </div>
             
             <div className="space-y-3">
@@ -828,7 +828,7 @@ export default function App() {
               ].map(diorama => (
                 <div 
                   key={diorama.name} 
-                  onClick={() => window.open(diorama.url, '_blank')}
+                  onClick={() => showNotify(`${diorama.name} 홈페이지 준비 중입니다.`)}
                   className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-pointer group bg-white active:scale-95 transition-all"
                 >
                   <img src={diorama.src} alt={diorama.name} className="w-full h-20 object-cover group-hover:scale-110 transition-transform duration-700" />
@@ -1696,7 +1696,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.7.2 - 디오라마 클릭 시 각 기관 홈페이지 연동 기능 추가
+          v2.7.3 - 디오라마 클릭 시 준비 중 안내 메시지 표시 (홈페이지 구축 전)
         </p>
       </motion.div>
     </div>
