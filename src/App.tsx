@@ -17,7 +17,8 @@ import {
   X,
   LayoutList,
   CalendarDays,
-  Camera
+  Camera,
+  User as UserIcon
 } from 'lucide-react';
 import { 
   collection, 
@@ -1239,7 +1240,7 @@ export default function App() {
 
                         {/* My Profile - Moved here */}
                         <div className="pt-4 border-t border-gray-50">
-                          <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><User size={14} />내 프로필 설정</h4>
+                          <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><UserIcon size={14} />내 프로필 설정</h4>
                           <div className="space-y-2">
                             <label className="text-[10px] font-bold text-text-muted uppercase ml-1">표시 이름 변경</label>
                             <div className="flex gap-2">
@@ -1560,7 +1561,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.6.7 - 빌드 오류 수정 및 최신반영
+          v2.6.8 - 설정 메뉴 충돌 오류 수정
         </p>
       </motion.div>
     </div>
