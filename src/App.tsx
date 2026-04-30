@@ -168,7 +168,9 @@ export default function App() {
 
   const [isAuthInitialCheckDone, setIsAuthInitialCheckDone] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLogoUploading, setIsLogoUploading] = useState(false);
   const [appName, setAppName] = useState('EduScheduler');
+  const [appLogo, setAppLogo] = useState('./app-logo.png');
 
   // --- Helpers ---
   const safeFormat = (date: any, fmt: string, options?: any) => {
@@ -226,6 +228,7 @@ export default function App() {
         const appConfig = await getDoc(doc(db, 'settings', 'app_config'));
         if (appConfig.exists()) {
           setAppName(appConfig.data().appName || 'EduScheduler');
+          setAppLogo(appConfig.data().appLogo || './app-logo.png');
         }
       } catch (err) {
         console.error("App config fetch error:", err);
@@ -440,6 +443,45 @@ export default function App() {
     }
   };
 
+  const handleAppLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !isAdmin) return;
+    
+    setIsLogoUploading(true);
+    try {
+      const storageRef = ref(storage, `app/logo`);
+      await uploadBytes(storageRef, file);
+      const logoURL = await getDownloadURL(storageRef);
+      
+      setAppLogo(logoURL);
+      await setDoc(doc(db, 'settings', 'app_config'), { 
+        appLogo: logoURL,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      showNotify('앱 로고가 변경되었습니다.');
+    } catch (err) {
+      console.error(err);
+      showNotify('로고 업로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsLogoUploading(false);
+    }
+  };
+
+  const handleUpdateAppName = async (newName: string) => {
+    if (!isAdmin) return;
+    try {
+      setAppName(newName);
+      await setDoc(doc(db, 'settings', 'app_config'), { 
+        appName: newName,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      showNotify('앱 이름이 변경되었습니다.');
+    } catch (err) {
+      console.error(err);
+      showNotify('변경 중 오류가 발생했습니다.');
+    }
+  };
+
   const scrollToNotifications = () => {
     const el = document.getElementById('system-notifications');
     if (el) {
@@ -634,8 +676,8 @@ export default function App() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="flex flex-col items-center"
         >
-          <div className="w-20 h-20 bg-accent-color rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-200 mb-6 animate-pulse">
-            <CalendarDays size={40} className="text-white" />
+          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-200 mb-6 overflow-hidden p-2">
+            <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-xl font-bold text-text-main tracking-tight">{appName}</h2>
           <p className="text-sm text-text-muted mt-2">시스템 초기화 중...</p>
@@ -660,6 +702,7 @@ export default function App() {
         isLoading={isLoginLoading}
         error={loginError}
         appName={appName}
+        appLogo={appLogo}
       />
     );
   }
@@ -680,8 +723,8 @@ export default function App() {
       {/* Sidebar (Desktop) */}
       <aside className="hidden lg:flex w-64 bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
         <div className="flex items-center gap-3 px-2 mb-10">
-          <div className="w-10 h-10 bg-accent-color rounded-xl flex items-center justify-center shadow-lg shadow-blue-100">
-            <CalendarDays size={20} className="text-white" />
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-border-color overflow-hidden p-1">
+            <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-xl font-black text-accent-color tracking-tighter">{appName}</h1>
         </div>
@@ -1129,22 +1172,41 @@ export default function App() {
                       <section className="space-y-4">
                         <div>
                           <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><Settings size={14} />앱 설정</h4>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-text-muted uppercase ml-1">앱 명칭 변경</label>
-                            <div className="flex gap-2">
-                              <input 
-                                type="text" 
-                                value={appName} 
-                                onChange={(e) => setAppName(e.target.value)}
-                                className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
-                                placeholder="앱 이름을 입력하세요"
-                              />
-                              <button 
-                                onClick={() => handleUpdateAppName(appName)}
-                                className="px-3 h-9 bg-accent-color text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors"
-                              >
-                                저장
-                              </button>
+                          <div className="grid grid-cols-1 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-text-muted uppercase ml-1">앱 로고 아이콘</label>
+                              <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm border border-border-color overflow-hidden p-1">
+                                  {isLogoUploading ? (
+                                    <div className="w-4 h-4 border-2 border-accent-color border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <img src={appLogo} alt="Current Logo" className="w-full h-full object-contain" />
+                                  )}
+                                </div>
+                                <label className="flex-1">
+                                  <span className="inline-block px-3 py-1.5 bg-white border border-border-color rounded-lg text-[10px] font-bold text-text-main cursor-pointer hover:bg-gray-100 transition-colors">아이콘 변경</span>
+                                  <input type="file" accept="image/*" className="hidden" onChange={handleAppLogoUpload} />
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-text-muted uppercase ml-1">앱 명칭 변경</label>
+                              <div className="flex gap-2">
+                                <input 
+                                  type="text" 
+                                  value={appName} 
+                                  onChange={(e) => setAppName(e.target.value)}
+                                  className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-xl text-xs font-medium outline-none focus:border-accent-color transition-all"
+                                  placeholder="앱 이름을 입력하세요"
+                                />
+                                <button 
+                                  onClick={() => handleUpdateAppName(appName)}
+                                  className="px-3 h-9 bg-accent-color text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors"
+                                >
+                                  저장
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1365,7 +1427,9 @@ function LoginOverlay({
   pw, 
   setPw, 
   isLoading,
-  error 
+  error,
+  appName,
+  appLogo
 }: any) {
   return (
     <div className="fixed inset-0 z-[200] bg-bg-primary flex items-center justify-center p-6 overflow-hidden">
@@ -1380,10 +1444,10 @@ function LoginOverlay({
         className="w-full max-w-[400px] bg-white rounded-[32px] border border-border-color p-8 lg:p-10 shadow-2xl shadow-blue-900/5 relative z-10"
       >
         <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-16 h-16 bg-bg-primary rounded-2xl flex items-center justify-center border border-border-color mb-6 shadow-inner">
-            <img src="./app-logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center border border-border-color mb-6 shadow-sm p-2">
+            <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-2xl font-black text-text-main tracking-tight mb-2">EduScheduler</h1>
+          <h1 className="text-2xl font-black text-text-main tracking-tight mb-2">{appName}</h1>
           <p className="text-sm text-text-muted font-medium">스마트한 교육 일정 관리 시스템</p>
         </div>
 
