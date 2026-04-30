@@ -41,8 +41,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
-  User 
 } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1560,7 +1560,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.6.5 - 최신 업데이트 적용됨
+          v2.6.7 - 빌드 오류 수정 및 최신반영
         </p>
       </motion.div>
     </div>
