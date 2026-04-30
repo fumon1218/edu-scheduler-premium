@@ -482,6 +482,24 @@ export default function App() {
     }
   };
 
+  const handleUpdateDisplayName = async (newName: string) => {
+    if (!user) return;
+    try {
+      await updateProfile(user, { displayName: newName });
+      await updateDoc(doc(db, 'registered_users', user.uid), { 
+        displayName: newName,
+        updatedAt: serverTimestamp()
+      }).catch(() => {});
+      
+      // Update local state
+      setUser({ ...user, displayName: newName } as User);
+      showNotify('프로필 이름이 변경되었습니다.');
+    } catch (err) {
+      console.error(err);
+      showNotify('변경 중 오류가 발생했습니다.');
+    }
+  };
+
   const scrollToNotifications = () => {
     const el = document.getElementById('system-notifications');
     if (el) {
