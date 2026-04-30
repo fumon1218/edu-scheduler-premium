@@ -667,8 +667,17 @@ export default function App() {
   };
 
   const deleteCategoryItem = (type: 'programs' | 'locations' | 'targets', value: string) => {
+    if (!window.confirm(`'${value}' 항목을 정말 삭제하시겠습니까?`)) return;
     const currentList = type === 'programs' ? programs : type === 'locations' ? locations : targets;
     updateCategories(type, currentList.filter(item => item !== value));
+  };
+
+  const updateCategoryItem = (type: 'programs' | 'locations' | 'targets', oldValue: string, newValue: string) => {
+    const trimmedValue = newValue.trim();
+    if (!trimmedValue || oldValue === trimmedValue) return;
+    const currentList = type === 'programs' ? programs : type === 'locations' ? locations : targets;
+    if (currentList.includes(trimmedValue)) return showNotify('이미 존재하는 항목입니다.');
+    updateCategories(type, currentList.map(item => item === oldValue ? trimmedValue : item));
   };
 
   const resetForm = () => {
@@ -763,7 +772,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.6.9.1</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.0</p>
             </div>
             
             <div className="space-y-3">
@@ -1359,9 +1368,25 @@ export default function App() {
                           </div>
                           <div className="flex flex-wrap gap-1.5 pt-1">
                             {cat.list.map(item => (
-                              <div key={item} className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg group hover:bg-white transition-all">
-                                <span className="text-[10px] font-medium text-text-main">{item}</span>
-                                <button onClick={() => deleteCategoryItem(cat.type, item)} className="text-gray-300 hover:text-red-500 transition-colors"><X size={10} /></button>
+                              <div key={item} className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg group hover:border-accent-color transition-all">
+                                <input 
+                                  type="text"
+                                  defaultValue={item}
+                                  className="text-[10px] font-bold text-text-main bg-transparent border-none outline-none focus:text-accent-color transition-colors w-24"
+                                  onBlur={(e) => updateCategoryItem(cat.type, item, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      updateCategoryItem(cat.type, item, (e.target as HTMLInputElement).value);
+                                      (e.target as HTMLInputElement).blur();
+                                    }
+                                  }}
+                                />
+                                <button 
+                                  onClick={() => deleteCategoryItem(cat.type, item)} 
+                                  className="text-gray-300 hover:text-red-500 transition-colors opacity-40 group-hover:opacity-100"
+                                >
+                                  <X size={10} />
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -1609,7 +1634,7 @@ function LoginOverlay({
           분실 시 관리자에게 문의 바랍니다.
         </p>
         <p className="mt-4 text-center text-[9px] text-text-muted/50 font-bold uppercase tracking-widest">
-          v2.6.9.1 - 빌드 문법 오류 수정 완료
+          v2.7.0 - 카테고리 항목 직접 수정 및 삭제 확인 기능 추가
         </p>
       </motion.div>
     </div>
