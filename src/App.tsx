@@ -18,7 +18,9 @@ import {
   LayoutList,
   CalendarDays,
   Camera,
-  User as UserIcon
+  User as UserIcon,
+  Link2,
+  ExternalLink
 } from 'lucide-react';
 import { 
   collection, 
@@ -77,6 +79,20 @@ import {
   isValid
 } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import {
+  BRIDGE_MIRROR_ENABLED,
+  describeHubError,
+  subscribeGangneung,
+  syncMirror,
+} from './lib/gangneungBridge';
+import {
+  GANGNEUNG_APP_URL,
+  entriesByDate,
+  findLinkedEntries,
+  mergeRooms,
+  roomLabel,
+} from './lib/gangneungLink';
+import type { GnEntry, GnRoom } from './lib/gangneungLink';
 
 // --- Types ---
 interface Schedule {
@@ -134,6 +150,17 @@ export default function App() {
   const [notificationMsg, setNotificationMsg] = useState('');
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // --- 강릉분원 방문예약 앱 연동 ---
+  const [gnEntries, setGnEntries] = useState<GnEntry[]>([]); // 강릉 앱의 방문예약 (읽기 전용)
+  const [gnCustomRooms, setGnCustomRooms] = useState<GnRoom[]>([]); // 강릉 앱에서 추가한 프로그램실
+  const [gnStatus, setGnStatus] = useState<'connecting' | 'ok' | 'error'>('connecting');
+  const [gnError, setGnError] = useState('');
+  const [mirrorInfo, setMirrorInfo] = useState<{ state: 'idle' | 'ok' | 'error'; message: string }>({ state: 'idle', message: '' });
+  const [showGnEntries, setShowGnEntries] = useState(true); // 달력/목록에 방문예약 표시 여부
+  const [schedulesLoaded, setSchedulesLoaded] = useState(false); // 서버에서 수업 목록을 실제로 받아왔는지
+  const gnRooms = useMemo(() => mergeRooms(gnCustomRooms), [gnCustomRooms]);
+  const gnByDate = useMemo(() => entriesByDate(gnEntries), [gnEntries]);
 
   // Dynamic Lists State
   const [programs, setPrograms] = useState<string[]>(DEFAULT_PROGRAMS);
@@ -262,9 +289,45 @@ export default function App() {
     const q = query(collection(db, 'schedules'), orderBy('startTime'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Schedule));
+      // 캐시(오프라인) 데이터가 아니라 서버에서 받은 최신 목록일 때만 강릉 앱으로 내보내기를 허용합니다.
+      if (!snapshot.metadata.fromCache) setSchedulesLoaded(true);
     });
     return () => unsubscribe();
   }, []);
+
+  // 강릉 방문예약 앱의 예약(entries)과 추가 프로그램실(customRooms)을 실시간으로 받아옵니다. (읽기 전용)
+  useEffect(() => {
+    if (!user) return;
+    setGnStatus('connecting');
+    try {
+      return subscribeGangneung({
+        onEntries: (list) => { setGnEntries(list); setGnStatus('ok'); setGnError(''); },
+        onRooms: (rooms) => setGnCustomRooms(rooms),
+        onError: (_which, err) => { setGnStatus('error'); setGnError(describeHubError(err)); },
+      });
+    } catch (err) {
+      setGnStatus('error');
+      setGnError(describeHubError(err));
+    }
+  }, [user?.uid]);
+
+  // 관리자가 접속해 있는 동안, 수업 일정을 강릉 앱이 읽을 수 있게 복사해 둡니다. (바뀐 것만 반영)
+  useEffect(() => {
+    if (!BRIDGE_MIRROR_ENABLED || !user || !isAdmin || !isAuthInitialCheckDone || !schedulesLoaded) return;
+    let cancelled = false;
+    syncMirror(schedules, gnRooms)
+      .then((r) => {
+        if (cancelled) return;
+        setMirrorInfo({
+          state: 'ok',
+          message: r.written + r.deleted > 0 ? `방금 ${r.written}건 반영, ${r.deleted}건 삭제` : '최신 상태입니다',
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) setMirrorInfo({ state: 'error', message: describeHubError(err) });
+      });
+    return () => { cancelled = true; };
+  }, [user?.uid, isAdmin, isAuthInitialCheckDone, schedulesLoaded, schedules, gnRooms]);
 
   // Fetch Notifications
   useEffect(() => {
@@ -814,6 +877,7 @@ export default function App() {
           <span className="font-bold text-base tracking-tight text-accent-color">{appName}</span>
         </div>
         <div className="flex items-center gap-1">
+          <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="p-2 text-text-muted hover:text-accent-color transition-colors"><Link2 size={20} /></a>
           <button onClick={scrollToNotifications} className="p-2 text-text-muted hover:text-accent-color transition-colors relative">
             <Bell size={20} />
             <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
@@ -850,6 +914,7 @@ export default function App() {
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
           <div onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
+          <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><Link2 size={18} /><span>강릉 방문예약</span><span className={cn("ml-auto w-2 h-2 rounded-full", gnStatus === 'ok' ? "bg-green-500" : gnStatus === 'error' ? "bg-red-500" : "bg-gray-300")} /></a>
           
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
@@ -1024,6 +1089,15 @@ export default function App() {
                 <button onClick={() => setViewMode(prev => prev === 'list' ? 'calendar' : 'list')} className="bg-white border border-border-color rounded-xl hover:bg-gray-50 transition-colors text-text-main flex items-center gap-2 px-4 h-[40px] shadow-sm shrink-0">
                   {viewMode === 'list' ? <><CalendarDays size={16} className="text-accent-color" /><span className="text-xs font-bold whitespace-nowrap">달력 보기</span></> : <><LayoutList size={16} className="text-accent-color" /><span className="text-xs font-bold whitespace-nowrap">리스트 보기</span></>}
                 </button>
+                <button
+                  onClick={() => setShowGnEntries(v => !v)}
+                  title={gnStatus === 'error' ? gnError : '강릉분원 방문예약을 함께 표시합니다'}
+                  className={cn("border rounded-xl transition-colors flex items-center gap-2 px-4 h-[40px] shadow-sm shrink-0 text-xs font-bold whitespace-nowrap", showGnEntries ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-white border-border-color text-text-muted hover:bg-gray-50")}
+                >
+                  <Link2 size={14} />
+                  <span>방문예약 {showGnEntries ? '표시 중' : '숨김'}</span>
+                  {gnStatus === 'error' && <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
+                </button>
               </div>
             </div>
 
@@ -1068,6 +1142,7 @@ export default function App() {
                               <div className="flex items-center gap-3 mb-1"><div className="flex items-center gap-1.5 text-accent-color"><Clock size={14} /><span className="text-xs font-bold">{s.startTime} - {s.endTime}</span></div><div className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{s.date}</div></div>
                               <h3 className="text-base font-bold text-text-main truncate mb-1">{s.program}</h3>
                               <div className="flex flex-wrap gap-4 items-center"><div className="flex items-center gap-1.5 text-xs text-text-muted"><MapPin size={12} className="opacity-50" /><span>{s.location}</span></div><div className="flex items-center gap-1.5 text-xs text-text-muted"><Users size={12} className="opacity-50" /><span>{s.target}</span></div></div>
+                              {showGnEntries && <GnLinkedTags schedule={s} entries={gnEntries} rooms={gnRooms} />}
                             </div>
                             {isAdmin && (
                               <div className="flex items-center gap-1 sm:opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1117,6 +1192,7 @@ export default function App() {
                               </button>
                             )}
                             {daySchedules.map(s => (<motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} key={s.id} onClick={() => handleEdit(s)} className="p-2 rounded-xl border border-border-color bg-bg-primary hover:border-accent-color hover:shadow-md transition-all cursor-pointer group relative"><div className="text-[9px] font-bold text-accent-color mb-0.5">{s.startTime}</div><h4 className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate">{s.program}</h4><div className="text-[9px] text-text-muted truncate opacity-80">{s.location}</div>{viewMode !== 'teacher' && <div className="text-[8px] font-bold text-gray-400 mt-1">{s.teacherName}</div>}</motion.div>))}
+                            {showGnEntries && viewMode === 'calendar' && (gnByDate.get(dateStr) || []).map(e => <GnEntryChip key={'gn-' + e.id} entry={e} rooms={gnRooms} />)}
                           </div>
                         );
                       })}
@@ -1181,6 +1257,14 @@ export default function App() {
                                 {daySchedules.length > 4 && (
                                   <div className="text-[8px] text-text-muted pl-1 font-bold italic opacity-60">
                                     + {daySchedules.length - 4} more
+                                  </div>
+                                )}
+                                {showGnEntries && viewMode === 'calendar' && (gnByDate.get(dateStr) || []).length > 0 && (
+                                  <div
+                                    title={(gnByDate.get(dateStr) || []).map(e => `${e.session === 'AM' ? '오전' : '오후'} ${roomLabel(gnRooms, e.room)} · ${e.org} ${e.count}명`).join('\n')}
+                                    className="px-1.5 py-1 bg-amber-50 text-amber-700 text-[9px] font-bold rounded border border-amber-200 truncate"
+                                  >
+                                    🔗 방문예약 {(gnByDate.get(dateStr) || []).length}건
                                   </div>
                                 )}
                               </div>
@@ -1320,6 +1404,43 @@ export default function App() {
                       </div>
 
                       <div className="flex-1 overflow-y-auto p-6 space-y-10 pb-24">
+                        {/* 강릉 방문예약 앱 연동 */}
+                        <section className="space-y-4">
+                          <div>
+                            <h4 className="text-xs font-black text-text-main flex items-center gap-2 mb-2">
+                              <Link2 size={14} className="text-accent-color" />
+                              강릉 방문예약 앱 연동
+                            </h4>
+                            <p className="text-[11px] text-text-muted leading-relaxed">
+                              강릉분원 방문예약 일정표와 실시간으로 데이터를 주고받습니다. 예약은 강릉 앱에서 관리하며, 여기서는 읽기 전용으로 표시됩니다.
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-border-color p-3 space-y-2 text-xs">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-bold text-text-muted">방문예약 불러오기</span>
+                              <span className={cn("font-bold", gnStatus === 'ok' ? "text-green-600" : gnStatus === 'error' ? "text-red-500" : "text-text-muted")}>
+                                {gnStatus === 'ok' ? `연결됨 · ${gnEntries.length}건` : gnStatus === 'error' ? '오류' : '연결 중...'}
+                              </span>
+                            </div>
+                            {gnStatus === 'error' && <p className="text-[11px] text-red-500 leading-relaxed">{gnError}</p>}
+                            {BRIDGE_MIRROR_ENABLED && isAdmin && (
+                              <>
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="font-bold text-text-muted">수업 일정 내보내기</span>
+                                  <span className={cn("font-bold text-right", mirrorInfo.state === 'ok' ? "text-green-600" : mirrorInfo.state === 'error' ? "text-red-500" : "text-text-muted")}>
+                                    {mirrorInfo.state === 'idle' ? '대기 중' : mirrorInfo.state === 'ok' ? mirrorInfo.message : '오류'}
+                                  </span>
+                                </div>
+                                {mirrorInfo.state === 'error' && <p className="text-[11px] text-red-500 leading-relaxed">{mirrorInfo.message}</p>}
+                              </>
+                            )}
+                          </div>
+                          <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-border-color text-xs font-bold text-accent-color hover:bg-blue-50 transition-colors">
+                            <ExternalLink size={14} />
+                            강릉 방문예약 앱 열기
+                          </a>
+                        </section>
+
                         {/* App Config */}
                         {isAdmin && (
                           <section className="space-y-6">
@@ -1502,6 +1623,7 @@ export default function App() {
 
                     {/* Account Management Section (Admin Only) */}
                     {isAdmin && (
+                      <>
                       <section className="space-y-4 pt-4 border-t border-border-color">
                         <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><Users size={14} />계정 관리 (공유용)</h4>
                         <div className="flex flex-col gap-3">
@@ -1566,6 +1688,7 @@ export default function App() {
                           ))}
                         </div>
                       </section>
+                      </>
                         )}
                       </div>
                     </motion.div>
@@ -1670,6 +1793,41 @@ export default function App() {
 }
 
 // --- Components ---
+
+// 강릉 방문예약 앱에 "같은 날짜·같은 실·겹치는 시간대(오전/오후)" 예약이 있으면 수업 카드에 작은 태그로 알려줍니다.
+function GnLinkedTags({ schedule, entries, rooms }: { schedule: Schedule; entries: GnEntry[]; rooms: GnRoom[] }) {
+  const linked = findLinkedEntries(schedule, entries, rooms);
+  if (linked.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {linked.map((e) => (
+        <span
+          key={e.id}
+          title="강릉분원 방문예약 앱에 같은 실·같은 시간대 예약이 있습니다"
+          className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200"
+        >
+          <Link2 size={10} />
+          방문예약 {e.session === 'AM' ? '오전' : '오후'} · {e.org} {e.count}명{e.note ? ` (${e.note})` : ''}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// 주간 달력에 표시되는 강릉 방문예약 카드 (읽기 전용)
+function GnEntryChip({ entry, rooms }: { entry: GnEntry; rooms: GnRoom[] }) {
+  return (
+    <div
+      className="p-2 rounded-xl border border-amber-200 bg-amber-50/70"
+      title={`강릉 방문예약 · ${roomLabel(rooms, entry.room)} · ${entry.org} ${entry.count}명${entry.note ? ` (${entry.note})` : ''}`}
+    >
+      <div className="text-[9px] font-bold text-amber-700 mb-0.5">{entry.session === 'AM' ? '오전' : '오후'} · 방문예약</div>
+      <h4 className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate">{entry.org} {entry.count}명</h4>
+      <div className="text-[9px] text-text-muted truncate opacity-80">{roomLabel(rooms, entry.room)}</div>
+    </div>
+  );
+}
+
 function LoginOverlay({ 
   onLogin, 
   onGoogleLogin,
