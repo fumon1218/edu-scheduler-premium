@@ -1260,7 +1260,7 @@ export default function App() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr,320px] gap-8">
+            <div className="flex flex-col gap-8">
               <div className="space-y-6">
                 {viewMode === 'list' ? (
                   <div className="bg-surface rounded-2xl border border-border-color overflow-hidden shadow-sm">
@@ -1440,125 +1440,92 @@ export default function App() {
                   className="bg-surface rounded-2xl border border-border-color p-6 shadow-sm relative overflow-hidden"
                 >
                   <h3 className="text-sm font-bold text-text-main uppercase mb-6 flex items-center gap-2"><div className="w-1.5 h-4 bg-accent-color rounded-full" />{editingId ? '일정 수정' : '신규 일정 등록'}</h3>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">날짜 선택</label>
-                      <input type="date" required className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color" value={formData.date} onChange={(e) => { const dateObj = parseISO(e.target.value); setFormData({ ...formData, date: e.target.value, day: safeFormat(dateObj, 'EEE', { locale: ko })[0] }); }} />
+                  <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">날짜</label>
+                      <input type="date" required className="h-9 w-[132px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color" value={formData.date} onChange={(e) => { const dateObj = parseISO(e.target.value); setFormData({ ...formData, date: e.target.value, day: safeFormat(dateObj, 'EEE', { locale: ko })[0] }); }} />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">일정 종류</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {SCHEDULE_CATEGORIES.map(c => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => setFormData({ ...formData, category: c.id })}
-                            className={cn(
-                              "px-3 h-8 rounded-full text-xs font-bold border transition-all flex items-center gap-1.5",
-                              formData.category === c.id ? cn(c.bg, c.text, c.border) : "bg-transparent text-text-muted border-border-color hover:border-accent-color"
-                            )}
-                          >
-                            <span className={cn("w-1.5 h-1.5 rounded-full", c.dot)} />
-                            {c.label}
-                          </button>
-                        ))}
-                      </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">종류</label>
+                      <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="h-9 w-[92px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color cursor-pointer">
+                        {SCHEDULE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                      </select>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5"><label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">시작 시간</label><input type="time" required className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color" value={formData.startTime} onChange={(e) => setFormData({...formData, startTime: e.target.value})} /></div>
-                      <div className="space-y-1.5"><label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">종료 시간</label><input type="time" required className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color" value={formData.endTime} onChange={(e) => setFormData({...formData, endTime: e.target.value})} /></div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">시작</label>
+                      <input type="time" required className="h-9 w-[108px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color" value={formData.startTime} onChange={(e) => setFormData({...formData, startTime: e.target.value})} />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">프로그램 명</label>
-                      <div className="relative">
-                        <select 
-                          id="program-input"
-                          required 
-                          className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" 
-                          value={formData.program} 
-                          onChange={(e) => setFormData({...formData, program: e.target.value})}
-                        >
-                          {(!programs.includes(formData.program) && formData.program) && (
-                            <option value={formData.program}>{formData.program} (삭제됨)</option>
-                          )}
-                          {programs.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                        <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
-                      </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">종료</label>
+                      <input type="time" required className="h-9 w-[108px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color" value={formData.endTime} onChange={(e) => setFormData({...formData, endTime: e.target.value})} />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">장소</label>
-                      <div className="relative">
-                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})}>
-                          {(!locations.includes(formData.location) && formData.location) && (
-                            <option value={formData.location}>{formData.location} (삭제됨)</option>
-                          )}
-                          {locations.map(l => <option key={l} value={l}>{l}</option>)}
-                        </select>
-                        <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
-                      </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">프로그램</label>
+                      <select id="program-input" required className="h-9 w-[140px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color cursor-pointer" value={formData.program} onChange={(e) => setFormData({...formData, program: e.target.value})}>
+                        {(!programs.includes(formData.program) && formData.program) && (
+                          <option value={formData.program}>{formData.program} (삭제됨)</option>
+                        )}
+                        {programs.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">대상</label>
-                      <div className="relative">
-                        <select required className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})}>
-                          {(!targets.includes(formData.target) && formData.target) && (
-                            <option value={formData.target}>{formData.target} (삭제됨)</option>
-                          )}
-                          {targets.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                        <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
-                      </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">장소</label>
+                      <select required className="h-9 w-[140px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color cursor-pointer" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})}>
+                        {(!locations.includes(formData.location) && formData.location) && (
+                          <option value={formData.location}>{formData.location} (삭제됨)</option>
+                        )}
+                        {locations.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">담당 교사</label>
-                      <div className="relative">
-                        <select className="w-full h-10 pl-3 pr-10 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color appearance-none cursor-pointer" value={formData.teacherId} onChange={(e) => setFormData({...formData, teacherId: e.target.value})}>
-                          <option value="">교사 미지정</option>
-                          {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                        <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
-                      </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">대상</label>
+                      <select required className="h-9 w-[100px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color cursor-pointer" value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})}>
+                        {(!targets.includes(formData.target) && formData.target) && (
+                          <option value={formData.target}>{formData.target} (삭제됨)</option>
+                        )}
+                        {targets.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">담당 교사</label>
+                      <select className="h-9 w-[120px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color cursor-pointer" value={formData.teacherId} onChange={(e) => setFormData({...formData, teacherId: e.target.value})}>
+                        <option value="">미지정</option>
+                        {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
                     </div>
                     {!editingId && (
-                      <div className="space-y-1.5 p-3 bg-bg-primary rounded-xl border border-border-color">
-                        <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">반복</label>
-                        <div className="flex gap-1.5">
-                          {([['none', '안함'], ['daily', '매일'], ['weekly', '매주'], ['monthly', '매월']] as const).map(([v, label]) => (
-                            <button
-                              key={v}
-                              type="button"
-                              onClick={() => setFormData({ ...formData, repeat: v })}
-                              className={cn("flex-1 h-8 rounded-lg text-xs font-bold transition-all", formData.repeat === v ? "bg-accent-color text-on-accent" : "bg-surface text-text-muted border border-border-color")}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        {formData.repeat !== 'none' && (
-                          <div className="pt-1">
-                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">반복 종료일 (최대 60회)</label>
-                            <input type="date" required min={formData.date} className="w-full h-9 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" value={formData.repeatEndDate} onChange={(e) => setFormData({ ...formData, repeatEndDate: e.target.value })} />
-                          </div>
-                        )}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">반복</label>
+                        <select value={formData.repeat} onChange={(e) => setFormData({ ...formData, repeat: e.target.value as typeof formData.repeat })} className="h-9 w-[84px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color cursor-pointer">
+                          <option value="none">안함</option>
+                          <option value="daily">매일</option>
+                          <option value="weekly">매주</option>
+                          <option value="monthly">매월</option>
+                        </select>
                       </div>
                     )}
-                    <button type="submit" className="w-full py-3 bg-accent-color text-on-accent rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] mt-2 disabled:bg-gray-400 disabled:shadow-none">{editingId ? '수정 완료' : '일정 추가하기'}</button>
-                    {editingId && (
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => deleteSchedule(editingId)} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl text-xs font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2 mt-2">
-                          <Trash2 size={14} /> 일정 삭제
-                        </button>
-                        <button type="button" onClick={resetForm} className="flex-1 py-3 text-text-muted text-xs font-bold hover:text-text-main transition-colors mt-2">취소</button>
+                    {!editingId && formData.repeat !== 'none' && (
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider ml-0.5">반복 종료일</label>
+                        <input type="date" required min={formData.date} className="h-9 w-[132px] px-2 bg-bg-primary border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color" value={formData.repeatEndDate} onChange={(e) => setFormData({ ...formData, repeatEndDate: e.target.value })} />
                       </div>
+                    )}
+                    <button type="submit" className="h-9 px-5 bg-accent-color text-on-accent rounded-lg text-xs font-bold shadow-sm hover:bg-blue-700 transition-all active:scale-[0.98] disabled:bg-gray-400">{editingId ? '수정 완료' : '추가'}</button>
+                    {editingId && (
+                      <>
+                        <button type="button" onClick={() => deleteSchedule(editingId)} className="h-9 px-3 bg-red-50 text-red-500 rounded-lg text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-1.5">
+                          <Trash2 size={12} /> 삭제
+                        </button>
+                        <button type="button" onClick={resetForm} className="h-9 px-3 text-text-muted text-xs font-bold hover:text-text-main transition-colors">취소</button>
+                      </>
                     )}
                     {editingId && schedules.find(s => s.id === editingId)?.seriesId && (
                       <button
                         type="button"
                         onClick={() => { const sc = schedules.find(s => s.id === editingId); if (sc?.seriesId) deleteSeries(sc.seriesId, sc.date); }}
-                        className="w-full py-2 text-[11px] font-bold text-red-400 hover:text-red-500 transition-colors flex items-center justify-center gap-1.5"
+                        className="h-9 px-3 text-[11px] font-bold text-red-400 hover:text-red-500 transition-colors flex items-center gap-1.5"
                       >
-                        <Trash2 size={12} /> 이 반복 일정, 앞으로 남은 회차 모두 삭제
+                        <Trash2 size={12} /> 반복 시리즈 모두 삭제
                       </button>
                     )}
                   </form>
@@ -1939,57 +1906,7 @@ export default function App() {
                     <p className="text-[10px] text-text-muted mt-4 leading-relaxed">방문예약 정보는 강릉 방문예약 앱에서 관리합니다. 여기서는 읽기 전용으로 표시되며, 담당 교사 지정만 이 화면에 저장됩니다.</p>
                   </motion.div>
                 )}
-                <div id="system-notifications" className="bg-surface rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm transition-all duration-500">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Bell size={14} className="text-yellow-500" />시스템 알림</h4>
-                    {isAdmin && (
-                      <button onClick={() => { setEditingNotifId('new'); setNotifForm({ title: '', content: '' }); }} className="p-1 hover:bg-yellow-50 rounded-lg text-yellow-600 transition-colors"><Plus size={14} /></button>
-                    )}
-                  </div>
-                  <p className="text-xs text-text-muted leading-relaxed mb-4">
-                    에듀 스케줄러 프리미엄 버전을 이용해 주셔서 감사합니다. {appName}의 모든 일정은 실시간으로 동기화됩니다.
-                  </p>
-                  <div className="space-y-3">
-                    {editingNotifId === 'new' && (
-                      <div className="p-3 bg-yellow-50/50 rounded-lg border border-yellow-200 space-y-2">
-                        <input className="w-full bg-transparent text-[11px] font-bold outline-none border-b border-yellow-200" placeholder="제목" value={notifForm.title} onChange={e => setNotifForm({...notifForm, title: e.target.value})} autoFocus />
-                        <input className="w-full bg-transparent text-[10px] outline-none" placeholder="내용" value={notifForm.content} onChange={e => setNotifForm({...notifForm, content: e.target.value})} />
-                        <div className="flex justify-end gap-2 pt-1 text-[10px] font-bold">
-                          <button onClick={() => setEditingNotifId(null)} className="text-gray-400">취소</button>
-                          <button onClick={saveNotif} className="text-yellow-600">저장</button>
-                        </div>
-                      </div>
-                    )}
-                    {notifs.map(n => (
-                      <div key={n.id} className="p-3 bg-bg-primary rounded-lg border border-border-color group relative">
-                        {editingNotifId === n.id ? (
-                          <div className="space-y-2">
-                            <input className="w-full bg-transparent text-[11px] font-bold outline-none border-b border-gray-200" value={notifForm.title} onChange={e => setNotifForm({...notifForm, title: e.target.value})} autoFocus />
-                            <input className="w-full bg-transparent text-[10px] outline-none" value={notifForm.content} onChange={e => setNotifForm({...notifForm, content: e.target.value})} />
-                            <div className="flex justify-end gap-2 pt-1 text-[10px] font-bold">
-                              <button onClick={() => setEditingNotifId(null)} className="text-gray-400">취소</button>
-                              <button onClick={saveNotif} className="text-accent-color">수정</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-[11px] font-bold text-text-main mb-0.5">{n.title}</p>
-                            <p className="text-[10px] text-text-muted">{n.content}</p>
-                            {isAdmin && (
-                              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                                <button onClick={() => { setEditingNotifId(n.id); setNotifForm({ title: n.title, content: n.content }); }} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-accent-color"><Edit2 size={10} /></button>
-                                <button onClick={() => deleteNotif(n.id)} className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"><X size={10} /></button>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    ))}
-                    {notifs.length === 0 && !editingNotifId && (
-                      <p className="text-[10px] text-text-muted italic py-4 text-center">공지사항이 없습니다.</p>
-                    )}
-                  </div>
-                </div>
+
               </div>
               </div>
             </div>
