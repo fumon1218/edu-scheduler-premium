@@ -22,7 +22,10 @@ import {
   Link2,
   ExternalLink,
   Sun,
-  Moon
+  Moon,
+  ListChecks,
+  GripVertical,
+  ClipboardList
 } from 'lucide-react';
 import { 
   collection, 
@@ -108,8 +111,20 @@ interface Schedule {
   target: string;
   teacherId?: string; // ID of the teacher assigned
   teacherName?: string; // Name of the teacher (denormalized for easy display)
+  category?: string; // 일정 종류 (수업/회의/출장/행사/개인업무). 값이 없으면 '수업'으로 취급합니다(예전 데이터 호환)
+  seriesId?: string; // 반복 등록으로 생성된 일정이면, 같은 회차끼리 공유하는 id
   createdAt: any;
 }
+
+// 일정 종류: 색은 라이트/다크 모드에 맞게 index.css에 이미 정의된 팔레트를 사용합니다.
+const SCHEDULE_CATEGORIES: { id: string; label: string; dot: string; bg: string; text: string; border: string }[] = [
+  { id: 'class',    label: '수업',     dot: 'bg-blue-500',   bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200' },
+  { id: 'meeting',  label: '회의',     dot: 'bg-green-500',  bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
+  { id: 'trip',     label: '출장',     dot: 'bg-amber-500',  bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
+  { id: 'event',    label: '행사',     dot: 'bg-yellow-500', bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
+  { id: 'personal', label: '개인업무', dot: 'bg-gray-400',   bg: 'bg-gray-50',   text: 'text-gray-600',   border: 'border-gray-200' },
+];
+const categoryOf = (id?: string) => SCHEDULE_CATEGORIES.find(c => c.id === (id || 'class')) || SCHEDULE_CATEGORIES[0];
 
 interface Teacher {
   id: string;
@@ -154,7 +169,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'teacher'>('calendar');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'teacher' | 'tasks'>('calendar');
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('month');
   const [baseDate, setBaseDate] = useState(startOfToday());
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0); 
@@ -235,7 +250,10 @@ export default function App() {
     program: '',
     location: '',
     target: '',
-    teacherId: ''
+    teacherId: '',
+    category: 'class',
+    repeat: 'none' as 'none' | 'daily' | 'weekly' | 'monthly',
+    repeatEndDate: ''
   });
 
   const [isAuthInitialCheckDone, setIsAuthInitialCheckDone] = useState(false);
@@ -483,15 +501,17 @@ export default function App() {
 
   const currentViewWeek = weeksOfCurrentMonth[selectedWeekIndex] || weeksOfCurrentMonth[0] || [];
 
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const filteredSchedules = useMemo(() => {
     return schedules.filter(s => {
       const matchesSearch = 
         [s.program, s.location, s.target, s.teacherName].some(v => (v || '').toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesDay = selectedDay ? s.day === selectedDay : true;
       const matchesTeacher = viewMode === 'teacher' ? s.teacherId === selectedTeacherId : true;
-      return matchesSearch && matchesDay && matchesTeacher;
+      const matchesCategory = categoryFilter === 'all' ? true : (s.category || 'class') === categoryFilter;
+      return matchesSearch && matchesDay && matchesTeacher && matchesCategory;
     });
-  }, [schedules, searchTerm, selectedDay, viewMode, selectedTeacherId]);
+  }, [schedules, searchTerm, selectedDay, viewMode, selectedTeacherId, categoryFilter]);
 
   // Actions
   const handleIdPasswordLogin = async (e: React.FormEvent) => {
@@ -663,24 +683,45 @@ export default function App() {
     e.preventDefault();
     try {
       const teacherName = teachers.find(t => t.id === formData.teacherId)?.name || '';
-      const dataToSave = { ...formData, teacherName, updatedAt: Timestamp.now() };
+      const { repeat, repeatEndDate, ...rest } = formData;
+      const dataToSave = { ...rest, teacherName, updatedAt: Timestamp.now() };
 
       if (editingId) {
+        // 기존 일정 수정: 반복 여부와 무관하게 이 회차 하나만 바뀝니다.
         await updateDoc(doc(db, 'schedules', editingId), dataToSave);
         showNotify('일정이 수정되었습니다.');
+      } else if (repeat !== 'none' && repeatEndDate) {
+        // 반복 등록: 시작일부터 종료일까지 회차를 만들어 한 번에 등록합니다. (최대 60회)
+        const dates: string[] = [];
+        let cursor = parseISO(formData.date);
+        const endDate = parseISO(repeatEndDate);
+        while (cursor <= endDate && dates.length < 60) {
+          dates.push(format(cursor, 'yyyy-MM-dd'));
+          cursor = repeat === 'daily' ? addDays(cursor, 1) : repeat === 'weekly' ? addDays(cursor, 7) : addMonths(cursor, 1);
+        }
+        if (dates.length === 0) { showNotify('반복 종료일이 시작일보다 빠릅니다.'); return; }
+        const seriesId = 'series_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const batch = writeBatch(db);
+        dates.forEach((d) => {
+          const ref = doc(collection(db, 'schedules'));
+          batch.set(ref, { ...dataToSave, date: d, day: format(parseISO(d), 'EEE', { locale: ko })[0], seriesId, createdAt: Timestamp.now() });
+        });
+        await batch.commit();
+        showNotify(`반복 일정 ${dates.length}건이 등록되었습니다.`);
       } else {
         await addDoc(collection(db, 'schedules'), { ...dataToSave, createdAt: Timestamp.now() });
         showNotify('일정이 추가되었습니다.');
       }
       resetForm();
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); showNotify('저장 중 오류가 발생했습니다.'); }
   };
 
   const handleEdit = (schedule: Schedule) => {
     setFormData({
       day: schedule.day, date: schedule.date, startTime: schedule.startTime, endTime: schedule.endTime,
       program: schedule.program, location: schedule.location, target: schedule.target,
-      teacherId: schedule.teacherId || ''
+      teacherId: schedule.teacherId || '', category: schedule.category || 'class',
+      repeat: 'none', repeatEndDate: ''
     });
     setEditingId(schedule.id);
     setIsEditing(true);
@@ -694,6 +735,22 @@ export default function App() {
       resetForm();
     } catch (err) {
       showNotify('일정 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 반복 등록으로 만들어진 일정을, 앞으로 남은 회차까지 한 번에 지웁니다. (지난 회차는 남겨둡니다)
+  const deleteSeries = async (seriesId: string, fromDate: string) => {
+    const toDelete = schedules.filter(s => s.seriesId === seriesId && s.date >= fromDate);
+    if (toDelete.length === 0) return;
+    if (!window.confirm(`이 반복 일정 시리즈의 앞으로 남은 ${toDelete.length}건을 모두 삭제할까요? (지난 일정은 남겨둡니다)`)) return;
+    try {
+      const batch = writeBatch(db);
+      toDelete.forEach(s => batch.delete(doc(db, 'schedules', s.id)));
+      await batch.commit();
+      showNotify(`반복 일정 ${toDelete.length}건이 삭제되었습니다.`);
+      resetForm();
+    } catch (err) {
+      showNotify('삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -874,7 +931,8 @@ export default function App() {
   const resetForm = () => {
     setFormData({
       day: '월', date: format(startOfToday(), 'yyyy-MM-dd'), startTime: '10:00', endTime: '12:00',
-      program: programs[0] || '', location: locations[0] || '', target: targets[0] || '', teacherId: ''
+      program: programs[0] || '', location: locations[0] || '', target: targets[0] || '', teacherId: '',
+      category: 'class', repeat: 'none', repeatEndDate: ''
     });
     setEditingId(null);
     setIsEditing(false);
@@ -975,6 +1033,7 @@ export default function App() {
           <div onClick={() => { setViewMode('list'); setSelectedDay(null); }} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'list' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><LayoutList size={18} /><span>리스트 보기</span></div>
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
+          <div onClick={() => setViewMode('tasks')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'tasks' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><ListChecks size={18} /><span>업무 관리</span></div>
           <div onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
           <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><Link2 size={18} /><span>강릉 방문예약</span><span className={cn("ml-auto w-2 h-2 rounded-full", gnStatus === 'ok' ? "bg-green-500" : gnStatus === 'error' ? "bg-red-500" : "bg-gray-300")} /></a>
           
@@ -1063,6 +1122,7 @@ export default function App() {
 
         {/* Content Viewport */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-10 pb-32 lg:pb-10 bg-bg-primary">
+          {viewMode !== 'tasks' && (
           <div className="max-w-[1400px] mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 lg:gap-12">
               <div className="lg:col-span-4">
@@ -1151,6 +1211,15 @@ export default function App() {
                     <button onClick={() => setBaseDate(addMonths(baseDate, 1))} className="p-2 bg-surface border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronRight size={16} /></button>
                   </div>
                 ) : null}
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  title="일정 종류로 좁혀보기"
+                  className="h-9 px-3 bg-surface border border-border-color rounded-full text-xs font-bold outline-none focus:border-accent-color cursor-pointer shrink-0"
+                >
+                  <option value="all">전체 종류</option>
+                  {SCHEDULE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
                 <div className="h-8 w-[1px] bg-border-color mx-1 shrink-0 hidden sm:block" />
                 <button onClick={() => setViewMode(prev => prev === 'list' ? 'calendar' : 'list')} className="bg-surface border border-border-color rounded-full hover:bg-gray-50 transition-colors text-text-main flex items-center gap-2 px-4 h-[40px] shadow-sm shrink-0">
                   {viewMode === 'list' ? <><CalendarDays size={16} className="text-accent-color" /><span className="text-xs font-bold whitespace-nowrap">달력 보기</span></> : <><LayoutList size={16} className="text-accent-color" /><span className="text-xs font-bold whitespace-nowrap">리스트 보기</span></>}
@@ -1201,11 +1270,12 @@ export default function App() {
                     </div>
                     <div className="divide-y divide-border-color">
                       {filteredSchedules.map((s) => (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={s.id} className="p-4 sm:p-6 hover:bg-gray-50/50 transition-colors group relative">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={s.id} className="p-4 sm:p-6 hover:bg-gray-50/50 transition-colors group relative border-l-4" style={{ borderLeftColor: 'transparent' }}>
+                          <div className={cn("absolute left-0 top-0 bottom-0 w-1", categoryOf(s.category).dot)} />
                           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                             <div className="w-16 h-16 rounded-xl bg-bg-primary border border-border-color flex flex-col items-center justify-center shrink-0"><span className="text-xs font-bold text-text-muted">{s.day}</span><span className="text-[10px] font-medium text-text-muted opacity-60">요일</span></div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-3 mb-1"><div className="flex items-center gap-1.5 text-accent-color"><Clock size={14} /><span className="text-xs font-bold">{s.startTime} - {s.endTime}</span></div><div className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{s.date}</div></div>
+                              <div className="flex items-center gap-3 mb-1 flex-wrap"><div className="flex items-center gap-1.5 text-accent-color"><Clock size={14} /><span className="text-xs font-bold">{s.startTime} - {s.endTime}</span></div><div className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{s.date}</div><span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", categoryOf(s.category).bg, categoryOf(s.category).text)}>{categoryOf(s.category).label}</span>{s.seriesId && <span title="반복 일정" className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 flex items-center gap-1">🔁 반복</span>}</div>
                               <h3 className="text-base font-bold text-text-main truncate mb-1">{s.program}</h3>
                               <div className="flex flex-wrap gap-4 items-center"><div className="flex items-center gap-1.5 text-xs text-text-muted"><MapPin size={12} className="opacity-50" /><span>{s.location}</span></div><div className="flex items-center gap-1.5 text-xs text-text-muted"><Users size={12} className="opacity-50" /><span>{s.target}</span></div></div>
                               {showGnEntries && <GnLinkedTags schedule={s} entries={gnEntries} rooms={gnRooms} />}
@@ -1257,7 +1327,7 @@ export default function App() {
                                 <Plus size={10} />
                               </button>
                             )}
-                            {daySchedules.map(s => (<motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} key={s.id} onClick={() => handleEdit(s)} className="p-2 rounded-xl border border-border-color bg-bg-primary hover:border-accent-color hover:shadow-md transition-all cursor-pointer group relative"><div className="text-[9px] font-bold text-accent-color mb-0.5">{s.startTime}</div><h4 className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate">{s.program}</h4><div className="text-[9px] text-text-muted truncate opacity-80">{s.location}</div>{viewMode !== 'teacher' && <div className="text-[8px] font-bold text-gray-400 mt-1">{s.teacherName}</div>}</motion.div>))}
+                            {daySchedules.map(s => (<motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} key={s.id} onClick={() => handleEdit(s)} className={cn("p-2 rounded-xl border-l-4 border border-border-color bg-bg-primary hover:border-accent-color hover:shadow-md transition-all cursor-pointer group relative", categoryOf(s.category).border)}><div className="flex items-center gap-1 mb-0.5"><span className="text-[9px] font-bold text-accent-color">{s.startTime}</span>{s.seriesId && <span className="text-[8px]" title="반복 일정">🔁</span>}</div><h4 className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate">{s.program}</h4><div className="text-[9px] text-text-muted truncate opacity-80">{s.location}</div>{viewMode !== 'teacher' && <div className="text-[8px] font-bold text-gray-400 mt-1">{s.teacherName}</div>}</motion.div>))}
                             {showGnEntries && viewMode === 'calendar' && (gnByDate.get(dateStr) || []).map(e => <GnEntryChip key={'gn-' + e.id} entry={e} rooms={gnRooms} onClick={() => { setGnDetailDate(dateStr); setTimeout(() => document.getElementById('gn-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />)}
                           </div>
                         );
@@ -1316,9 +1386,9 @@ export default function App() {
                                       handleEdit(s); 
                                       document.getElementById('schedule-form')?.scrollIntoView({ behavior: 'smooth' });
                                     }}
-                                    className="px-1.5 py-1 bg-blue-50/50 text-accent-color text-[9px] font-bold rounded border border-blue-100/50 truncate cursor-pointer hover:bg-blue-100 hover:border-blue-300 transition-all shadow-sm"
+                                    className={cn("px-1.5 py-1 text-[9px] font-bold rounded border truncate cursor-pointer transition-all shadow-sm", categoryOf(s.category).bg, categoryOf(s.category).text, categoryOf(s.category).border)}
                                   >
-                                    {s.startTime} {s.program}
+                                    {s.startTime} {s.program}{s.seriesId ? ' 🔁' : ''}
                                   </div>
                                 ))}
                                 {daySchedules.length > 4 && (
@@ -1374,6 +1444,25 @@ export default function App() {
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">날짜 선택</label>
                       <input type="date" required className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color" value={formData.date} onChange={(e) => { const dateObj = parseISO(e.target.value); setFormData({ ...formData, date: e.target.value, day: safeFormat(dateObj, 'EEE', { locale: ko })[0] }); }} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">일정 종류</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {SCHEDULE_CATEGORIES.map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, category: c.id })}
+                            className={cn(
+                              "px-3 h-8 rounded-full text-xs font-bold border transition-all flex items-center gap-1.5",
+                              formData.category === c.id ? cn(c.bg, c.text, c.border) : "bg-transparent text-text-muted border-border-color hover:border-accent-color"
+                            )}
+                          >
+                            <span className={cn("w-1.5 h-1.5 rounded-full", c.dot)} />
+                            {c.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5"><label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block ml-1">시작 시간</label><input type="time" required className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm font-medium outline-none focus:border-accent-color" value={formData.startTime} onChange={(e) => setFormData({...formData, startTime: e.target.value})} /></div>
@@ -1431,6 +1520,29 @@ export default function App() {
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
                       </div>
                     </div>
+                    {!editingId && (
+                      <div className="space-y-1.5 p-3 bg-bg-primary rounded-xl border border-border-color">
+                        <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">반복</label>
+                        <div className="flex gap-1.5">
+                          {([['none', '안함'], ['daily', '매일'], ['weekly', '매주'], ['monthly', '매월']] as const).map(([v, label]) => (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, repeat: v })}
+                              className={cn("flex-1 h-8 rounded-lg text-xs font-bold transition-all", formData.repeat === v ? "bg-accent-color text-on-accent" : "bg-surface text-text-muted border border-border-color")}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {formData.repeat !== 'none' && (
+                          <div className="pt-1">
+                            <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">반복 종료일 (최대 60회)</label>
+                            <input type="date" required min={formData.date} className="w-full h-9 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" value={formData.repeatEndDate} onChange={(e) => setFormData({ ...formData, repeatEndDate: e.target.value })} />
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <button type="submit" className="w-full py-3 bg-accent-color text-on-accent rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] mt-2 disabled:bg-gray-400 disabled:shadow-none">{editingId ? '수정 완료' : '일정 추가하기'}</button>
                     {editingId && (
                       <div className="flex gap-2">
@@ -1439,6 +1551,15 @@ export default function App() {
                         </button>
                         <button type="button" onClick={resetForm} className="flex-1 py-3 text-text-muted text-xs font-bold hover:text-text-main transition-colors mt-2">취소</button>
                       </div>
+                    )}
+                    {editingId && schedules.find(s => s.id === editingId)?.seriesId && (
+                      <button
+                        type="button"
+                        onClick={() => { const sc = schedules.find(s => s.id === editingId); if (sc?.seriesId) deleteSeries(sc.seriesId, sc.date); }}
+                        className="w-full py-2 text-[11px] font-bold text-red-400 hover:text-red-500 transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Trash2 size={12} /> 이 반복 일정, 앞으로 남은 회차 모두 삭제
+                      </button>
                     )}
                   </form>
                 </motion.div>
@@ -1873,7 +1994,8 @@ export default function App() {
               </div>
             </div>
           </div>
-        </div>
+        </div>)}
+          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} />}
       </div>
 
         {/* Mobile Bottom Navigation Bar */}
@@ -1901,6 +2023,10 @@ export default function App() {
             </button>
           </div>
           
+          <button onClick={() => setViewMode('tasks')} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'tasks' ? "text-accent-color" : "text-text-muted")}>
+            <ListChecks size={20} strokeWidth={2.5} />
+            <span className="text-[10px] font-bold">업무</span>
+          </button>
           <button onClick={() => setViewMode('teacher')} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'teacher' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
             <Users size={20} strokeWidth={2.5} />
             <span className="text-[9px] font-black tracking-tighter">교사</span>
@@ -1919,6 +2045,220 @@ export default function App() {
 // --- Components ---
 
 // 강릉 방문예약 앱에 "같은 날짜·같은 실·겹치는 시간대(오전/오후)" 예약이 있으면 수업 카드에 작은 태그로 알려줍니다.
+// ===================== 업무 관리 (할 일 · 칸반보드 · 인수인계 메모) =====================
+interface Todo {
+  id: string;
+  title: string;
+  status: 'todo' | 'doing' | 'done';
+  assigneeId?: string;
+  assigneeName?: string;
+  dueDate?: string; // yyyy-MM-dd
+  note?: string;
+  createdAt: any;
+}
+interface HandoffNote {
+  id: string;
+  title: string;
+  content: string;
+  authorName: string;
+  createdAt: any;
+}
+
+const TODO_STATUSES: { id: Todo['status']; label: string }[] = [
+  { id: 'todo', label: '할 일' },
+  { id: 'doing', label: '진행 중' },
+  { id: 'done', label: '완료' },
+];
+
+function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: string }) {
+  const [subTab, setSubTab] = useState<'board' | 'notes'>('board');
+
+  // ---- 할 일 (todos) ----
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [newTitle, setNewTitle] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
+  const [newDue, setNewDue] = useState('');
+
+  useEffect(() => {
+    const q = query(collection(db, 'todos'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      setTodos(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Todo));
+    }, (err) => console.warn('todos snapshot error', err));
+  }, []);
+
+  const addTodo = async () => {
+    if (!newTitle.trim()) return;
+    try {
+      const assigneeName = teachers.find(t => t.id === newAssignee)?.name || '';
+      await addDoc(collection(db, 'todos'), {
+        title: newTitle.trim(),
+        status: 'todo',
+        assigneeId: newAssignee || null,
+        assigneeName: assigneeName || null,
+        dueDate: newDue || null,
+        createdAt: Timestamp.now(),
+      });
+      setNewTitle(''); setNewAssignee(''); setNewDue('');
+    } catch (err) { console.error(err); }
+  };
+
+  const moveTodo = async (id: string, status: Todo['status']) => {
+    try { await updateDoc(doc(db, 'todos', id), { status }); } catch (err) { console.error(err); }
+  };
+
+  const deleteTodo = async (id: string) => {
+    if (!window.confirm('이 할 일을 삭제할까요?')) return;
+    try { await deleteDoc(doc(db, 'todos', id)); } catch (err) { console.error(err); }
+  };
+
+  const columns = useMemo(() => {
+    const byStatus: Record<Todo['status'], Todo[]> = { todo: [], doing: [], done: [] };
+    todos.forEach((t: Todo) => { (byStatus[t.status] || byStatus.todo).push(t); });
+    (Object.keys(byStatus) as Todo['status'][]).forEach(k => {
+      byStatus[k].sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99'));
+    });
+    return byStatus;
+  }, [todos]);
+
+  const today = format(startOfToday(), 'yyyy-MM-dd');
+
+  // ---- 인수인계 메모 (handoffNotes) ----
+  const [notes, setNotes] = useState<HandoffNote[]>([]);
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+
+  useEffect(() => {
+    const q = query(collection(db, 'handoffNotes'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() }) as HandoffNote));
+    }, (err) => console.warn('handoffNotes snapshot error', err));
+  }, []);
+
+  const addNote = async () => {
+    if (!noteTitle.trim() || !noteContent.trim()) return;
+    try {
+      await addDoc(collection(db, 'handoffNotes'), {
+        title: noteTitle.trim(), content: noteContent.trim(), authorName, createdAt: Timestamp.now(),
+      });
+      setNoteTitle(''); setNoteContent('');
+    } catch (err) { console.error(err); }
+  };
+
+  const deleteNote = async (id: string) => {
+    if (!window.confirm('이 메모를 삭제할까요?')) return;
+    try { await deleteDoc(doc(db, 'handoffNotes', id)); } catch (err) { console.error(err); }
+  };
+
+  return (
+    <div className="max-w-[1400px] mx-auto">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+        <div>
+          <h2 className="font-serif text-2xl font-bold text-text-main">업무 관리</h2>
+          <p className="text-sm text-text-muted mt-1">할 일과 인수인계 사항을 팀과 함께 관리하세요</p>
+        </div>
+        <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit shadow-sm">
+          <button onClick={() => setSubTab('board')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5", subTab === 'board' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
+            <ListChecks size={14} /> 할 일 보드
+          </button>
+          <button onClick={() => setSubTab('notes')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5", subTab === 'notes' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
+            <ClipboardList size={14} /> 인수인계 메모
+          </button>
+        </div>
+      </div>
+
+      {subTab === 'board' ? (
+        <div className="space-y-6">
+          {/* 새 할 일 추가 */}
+          <div className="bg-surface rounded-2xl border border-border-color p-4 shadow-sm flex flex-col sm:flex-row gap-2">
+            <input
+              type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addTodo(); }}
+              placeholder="새 할 일 제목을 입력하세요"
+              className="flex-1 h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color"
+            />
+            <select value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color">
+              <option value="">담당자 미지정</option>
+              {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+            <button onClick={addTodo} className="h-10 px-5 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all flex items-center gap-1.5 justify-center shrink-0">
+              <Plus size={16} /> 추가
+            </button>
+          </div>
+
+          {/* 칸반 보드: 3열 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {TODO_STATUSES.map((col) => (
+              <div key={col.id} className="bg-surface rounded-2xl border border-border-color p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold text-text-main uppercase flex items-center gap-2">
+                    <span className={cn("w-2 h-2 rounded-full", col.id === 'todo' ? "bg-gray-400" : col.id === 'doing' ? "bg-amber-500" : "bg-green-500")} />
+                    {col.label}
+                  </h3>
+                  <span className="text-[10px] font-bold text-text-muted bg-bg-primary px-2 py-0.5 rounded-full">{columns[col.id].length}</span>
+                </div>
+                <div className="space-y-2 min-h-[80px]">
+                  {columns[col.id].length === 0 && (
+                    <p className="text-[11px] text-text-muted italic text-center py-6">항목이 없습니다</p>
+                  )}
+                  {columns[col.id].map(t => {
+                    const overdue = t.dueDate && t.dueDate < today && t.status !== 'done';
+                    return (
+                      <div key={t.id} className="p-3 bg-bg-primary rounded-xl border border-border-color group">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={cn("text-sm font-semibold text-text-main flex-1", t.status === 'done' && "line-through opacity-50")}>{t.title}</p>
+                          <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><X size={14} /></button>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {t.assigneeName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-accent-color">{t.assigneeName}</span>}
+                          {t.dueDate && <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", overdue ? "bg-red-50 text-red-500" : "bg-gray-100 text-text-muted")}>{t.dueDate}{overdue ? ' 지남' : ''}</span>}
+                        </div>
+                        <div className="flex gap-1.5 mt-3">
+                          {TODO_STATUSES.filter(s => s.id !== t.status).map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => moveTodo(t.id, s.id)}
+                              className="flex-1 h-7 rounded-lg text-[10px] font-bold bg-surface border border-border-color text-text-muted hover:border-accent-color hover:text-accent-color transition-all"
+                            >
+                              → {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1 bg-surface rounded-2xl border border-border-color p-5 shadow-sm h-fit space-y-3">
+            <h3 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Plus size={14} /> 새 메모 작성</h3>
+            <input type="text" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} placeholder="제목" className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+            <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="인수인계할 내용을 적어주세요" rows={6} className="w-full p-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color resize-none" />
+            <button onClick={addNote} className="w-full h-10 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all">메모 남기기</button>
+          </div>
+          <div className="lg:col-span-2 space-y-3">
+            {notes.length === 0 && <div className="p-10 text-center text-text-muted text-sm bg-surface rounded-2xl border border-border-color">아직 남겨진 메모가 없습니다.</div>}
+            {notes.map(n => (
+              <div key={n.id} className="bg-surface rounded-2xl border border-border-color p-5 shadow-sm group">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h4 className="text-sm font-bold text-text-main">{n.title}</h4>
+                  <button onClick={() => deleteNote(n.id)} className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><Trash2 size={14} /></button>
+                </div>
+                <p className="text-sm text-text-muted whitespace-pre-wrap leading-relaxed">{n.content}</p>
+                <div className="flex items-center gap-1.5 mt-3 text-[10px] text-text-muted"><UserIcon size={11} /><span className="font-bold">{n.authorName}</span><span>· {n.createdAt?.toDate ? format(n.createdAt.toDate(), 'yyyy-MM-dd HH:mm') : ''}</span></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GnLinkedTags({ schedule, entries, rooms }: { schedule: Schedule; entries: GnEntry[]; rooms: GnRoom[] }) {
   const linked = findLinkedEntries(schedule, entries, rooms);
   if (linked.length === 0) return null;
