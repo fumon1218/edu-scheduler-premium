@@ -956,7 +956,7 @@ export default function App() {
           <div className="w-20 h-20 bg-surface rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-200 mb-6 overflow-hidden p-2">
             <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <h2 className="text-xl font-bold text-text-main tracking-tight">{appName}</h2>
+          <h2 className="text-xl font-bold text-text-main tracking-tight whitespace-nowrap max-w-full overflow-hidden text-ellipsis px-4" title={appName}>{appName}</h2>
           <p className="text-sm text-text-muted mt-2">시스템 초기화 중...</p>
           <div className="mt-8 w-48 h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <motion.div 
@@ -990,10 +990,10 @@ export default function App() {
       <header className="lg:hidden fixed top-0 left-0 right-0 bg-surface/80 backdrop-blur-md border-b border-border-color z-40 px-4 h-14 flex items-center justify-between">
         <div 
           onClick={() => { setViewMode('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-          className="flex items-center gap-2 cursor-pointer"
+          className="flex items-center gap-2 cursor-pointer min-w-0"
         >
-          <img src={appLogo} alt="Logo" className="w-7 h-7 object-contain" />
-          <span className="font-serif font-bold text-base tracking-tight text-accent-color">{appName}</span>
+          <img src={appLogo} alt="Logo" className="w-7 h-7 object-contain shrink-0" />
+          <span className="font-serif font-bold text-base tracking-tight text-accent-color whitespace-nowrap overflow-hidden text-ellipsis" title={appName}>{appName}</span>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={toggleTheme} aria-label="라이트/다크 모드 전환" className="p-2 text-text-muted hover:text-accent-color transition-colors">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
@@ -1026,7 +1026,7 @@ export default function App() {
           <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center shadow-md border border-border-color overflow-hidden p-1">
             <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <h1 className="font-serif text-xl font-bold text-accent-color tracking-tight">{appName}</h1>
+          <h1 className="font-serif text-sm font-bold text-accent-color tracking-tight whitespace-nowrap overflow-hidden text-ellipsis min-w-0 flex-1" title={appName}>{appName}</h1>
         </div>
         
         <nav className="flex-1 space-y-1">
@@ -2414,7 +2414,7 @@ function LoginOverlay({
           <div className="w-16 h-16 bg-surface rounded-2xl flex items-center justify-center border border-border-color mb-6 shadow-sm p-2">
             <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-2xl font-black text-text-main tracking-tight mb-2">{appName}</h1>
+          <h1 className="text-2xl font-black text-text-main tracking-tight mb-2 whitespace-nowrap max-w-full overflow-hidden text-ellipsis px-2" title={appName}>{appName}</h1>
           <p className="text-sm text-text-muted font-medium">스마트한 교육 일정 관리 시스템</p>
         </div>
 
