@@ -109,14 +109,13 @@ interface Schedule {
   program: string;
   location: string;
   target: string;
-  teacherId?: string; // ID of the teacher assigned
-  teacherName?: string; // Name of the teacher (denormalized for easy display)
-  category?: string; // 일정 종류 (수업/회의/출장/행사/개인업무). 값이 없으면 '수업'으로 취급합니다(예전 데이터 호환)
-  seriesId?: string; // 반복 등록으로 생성된 일정이면, 같은 회차끼리 공유하는 id
+  teacherId?: string;
+  teacherName?: string;
+  category?: string;
+  seriesId?: string;
   createdAt: any;
 }
 
-// 일정 종류: 색은 라이트/다크 모드에 맞게 index.css에 이미 정의된 팔레트를 사용합니다.
 const SCHEDULE_CATEGORIES: { id: string; label: string; dot: string; bg: string; text: string; border: string }[] = [
   { id: 'class',    label: '수업',     dot: 'bg-blue-500',   bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200' },
   { id: 'meeting',  label: '회의',     dot: 'bg-green-500',  bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
@@ -145,8 +144,6 @@ const DEFAULT_LOCATIONS = ['1층 안전체험관', '1층 바리스타체험실',
 const DEFAULT_TARGETS = ['유초등', '중고등', '전공과'];
 const DAYS = ['월', '화', '수', '목', '금'];
 
-// 헥스 색상을 Tailwind CSS 변수 형식("R G B")으로 바꾸고, 그 위에 놓을 글자가
-// 흰색이 나을지 짙은 남색이 나을지 밝기로 판단합니다. (설정 > 앱 메인 컬러)
 function hexToRgbTriplet(hex: string): string {
   const h = hex.replace('#', '');
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
@@ -187,19 +184,18 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // --- 강릉분원 방문예약 앱 연동 ---
-  const [gnEntries, setGnEntries] = useState<GnEntry[]>([]); // 강릉 앱의 방문예약 (읽기 전용)
-  const [gnCustomRooms, setGnCustomRooms] = useState<GnRoom[]>([]); // 강릉 앱에서 추가한 프로그램실
+  const [gnEntries, setGnEntries] = useState<GnEntry[]>([]);
+  const [gnCustomRooms, setGnCustomRooms] = useState<GnRoom[]>([]);
   const [gnStatus, setGnStatus] = useState<'connecting' | 'ok' | 'error'>('connecting');
   const [gnError, setGnError] = useState('');
   const [mirrorInfo, setMirrorInfo] = useState<{ state: 'idle' | 'ok' | 'error'; message: string }>({ state: 'idle', message: '' });
-  const [showGnEntries, setShowGnEntries] = useState(true); // 달력/목록에 방문예약 표시 여부
-  const [schedulesLoaded, setSchedulesLoaded] = useState(false); // 서버에서 수업 목록을 실제로 받아왔는지
+  const [showGnEntries, setShowGnEntries] = useState(true);
+  const [schedulesLoaded, setSchedulesLoaded] = useState(false);
   const gnRooms = useMemo(() => mergeRooms(gnCustomRooms), [gnCustomRooms]);
   const gnByDate = useMemo(() => entriesByDate(gnEntries), [gnEntries]);
-  const [gnDetailDate, setGnDetailDate] = useState<string | null>(null); // 하단에 현황을 펼쳐서 보여줄 날짜
-  const [gnEntryTeachers, setGnEntryTeachers] = useState<Record<string, string>>({}); // 방문예약 id -> 담당 교사 id
+  const [gnDetailDate, setGnDetailDate] = useState<string | null>(null);
+  const [gnEntryTeachers, setGnEntryTeachers] = useState<Record<string, string>>({});
 
-  // --- 화면 테마 (라이트/다크). 처음 값은 index.html 의 스크립트가 미리 적용해 둡니다. ---
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
   );
@@ -211,7 +207,7 @@ export default function App() {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
     document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('eduThemeV1', next); } catch { /* 저장 실패는 무시 */ }
+    try { localStorage.setItem('eduThemeV1', next); } catch { }
   };
 
   // Dynamic Lists State
@@ -286,17 +282,14 @@ export default function App() {
     } catch { return false; }
   };
 
-  // Auth State & Role Check
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        // Simple Admin Check: If ID starts with 'admin'
         const id = u.email?.split('@')[0];
         if (id?.startsWith('admin')) {
           setIsAdmin(true);
         } else {
-          // Check Firestore for role
           try {
             const userDoc = await getDoc(doc(db, 'registered_users', u.uid));
             if (userDoc.exists()) {
@@ -313,7 +306,6 @@ export default function App() {
         setIsAdmin(false);
       }
       
-      // Fetch App Settings
       try {
         const appConfig = await getDoc(doc(db, 'settings', 'app_config'));
         if (appConfig.exists()) {
@@ -330,7 +322,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch Registered Users (for Admin)
   useEffect(() => {
     if (!isAdmin) return;
     const q = query(collection(db, 'registered_users'), orderBy('id'));
@@ -339,18 +330,15 @@ export default function App() {
     });
   }, [isAdmin]);
 
-  // Fetch Schedules
   useEffect(() => {
     const q = query(collection(db, 'schedules'), orderBy('startTime'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Schedule));
-      // 캐시(오프라인) 데이터가 아니라 서버에서 받은 최신 목록일 때만 강릉 앱으로 내보내기를 허용합니다.
       if (!snapshot.metadata.fromCache) setSchedulesLoaded(true);
     });
     return () => unsubscribe();
   }, []);
 
-  // 강릉 방문예약 앱의 예약(entries)과 추가 프로그램실(customRooms)을 실시간으로 받아옵니다. (읽기 전용)
   useEffect(() => {
     if (!user) return;
     setGnStatus('connecting');
@@ -366,7 +354,6 @@ export default function App() {
     }
   }, [user?.uid]);
 
-  // 관리자가 접속해 있는 동안, 수업 일정을 강릉 앱이 읽을 수 있게 복사해 둡니다. (바뀐 것만 반영)
   useEffect(() => {
     if (!BRIDGE_MIRROR_ENABLED || !user || !isAdmin || !isAuthInitialCheckDone || !schedulesLoaded) return;
     let cancelled = false;
@@ -384,7 +371,6 @@ export default function App() {
     return () => { cancelled = true; };
   }, [user?.uid, isAdmin, isAuthInitialCheckDone, schedulesLoaded, schedules, gnRooms]);
 
-  // Fetch Notifications
   useEffect(() => {
     const q = query(collection(db, 'system_notifications'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
@@ -392,7 +378,6 @@ export default function App() {
     });
   }, []);
 
-  // 방문예약 담당 교사 매핑 구독 (우리 쪽 Firebase에 저장 — 강릉 앱 데이터는 건드리지 않습니다)
   useEffect(() => {
     if (!user) return;
     return onSnapshot(collection(db, 'gnEntryTeachers'), (snapshot) => {
@@ -402,7 +387,6 @@ export default function App() {
     }, err => console.warn('gnEntryTeachers snapshot error', err));
   }, [user?.uid]);
 
-  // 방문예약에 담당 교사를 지정/해제합니다.
   const assignGnEntryTeacher = async (entryId: string, teacherId: string) => {
     try {
       if (!teacherId) {
@@ -416,7 +400,6 @@ export default function App() {
     }
   };
 
-  // Fetch Teachers
   useEffect(() => {
     const q = query(collection(db, 'teachers'), orderBy('name'));
     return onSnapshot(q, (snapshot) => {
@@ -428,7 +411,6 @@ export default function App() {
     });
   }, [selectedTeacherId]);
 
-  // Fetch App Settings (Categories)
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'config'), (docSnap) => {
       if (docSnap.exists()) {
@@ -437,13 +419,11 @@ export default function App() {
         if (data.locations) setLocations(data.locations);
         if (data.targets) setTargets(data.targets);
       } else {
-        // Initialize with defaults if not exists
         updateDoc(doc(db, 'settings', 'config'), {
           programs: DEFAULT_PROGRAMS,
           locations: DEFAULT_LOCATIONS,
           targets: DEFAULT_TARGETS
         }).catch(() => {
-          // If update fails (e.g. doc doesn't exist at all), try setDoc or just use defaults
           import('firebase/firestore').then(({ setDoc }) => {
             setDoc(doc(db, 'settings', 'config'), {
               programs: DEFAULT_PROGRAMS,
@@ -457,7 +437,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Update Form Defaults when categories load
   useEffect(() => {
     if (!editingId) {
       setFormData(prev => ({
@@ -469,7 +448,6 @@ export default function App() {
     }
   }, [programs, locations, targets, editingId]);
 
-  // Calendar Helpers
   const calendarDays = useMemo(() => {
     try {
       const monthStart = startOfMonth(baseDate);
@@ -513,7 +491,6 @@ export default function App() {
     });
   }, [schedules, searchTerm, selectedDay, viewMode, selectedTeacherId, categoryFilter]);
 
-  // Actions
   const handleIdPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginId || !loginPw) return;
@@ -524,7 +501,6 @@ export default function App() {
       try {
         await signInWithEmailAndPassword(auth, email, loginPw);
       } catch (err: any) {
-        // Bootstrap: If trying to login as an admin-prefixed account and it fails, attempt to create it
         if (loginId.startsWith('admin')) {
           try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, loginPw);
@@ -536,7 +512,6 @@ export default function App() {
             });
           } catch (createErr: any) {
             console.error("Bootstrap error:", createErr);
-            // If creation fails, throw the creation error instead to see why it's failing
             throw createErr;
           }
         } else {
@@ -581,11 +556,8 @@ export default function App() {
       const photoURL = await getDownloadURL(storageRef);
       
       await updateProfile(user, { photoURL });
-      await updateDoc(doc(db, 'registered_users', user.uid), { photoURL }).catch(() => {
-        // If doc doesn't exist, ignore
-      });
+      await updateDoc(doc(db, 'registered_users', user.uid), { photoURL }).catch(() => {});
       
-      // Update local user state to reflect changes immediately
       setUser({ ...user, photoURL } as User);
       showNotify('프로필 사진이 업데이트되었습니다.');
     } catch (err) {
@@ -644,7 +616,6 @@ export default function App() {
         updatedAt: serverTimestamp()
       }).catch(() => {});
       
-      // Update local state
       setUser({ ...user, displayName: newName } as User);
       showNotify('프로필 이름이 변경되었습니다.');
     } catch (err) {
@@ -673,7 +644,6 @@ export default function App() {
     const el = document.getElementById('system-notifications');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
-      // Pulse effect
       el.classList.add('ring-2', 'ring-yellow-400');
       setTimeout(() => el?.classList.remove('ring-2', 'ring-yellow-400'), 2000);
     }
@@ -687,11 +657,9 @@ export default function App() {
       const dataToSave = { ...rest, teacherName, updatedAt: Timestamp.now() };
 
       if (editingId) {
-        // 기존 일정 수정: 반복 여부와 무관하게 이 회차 하나만 바뀝니다.
         await updateDoc(doc(db, 'schedules', editingId), dataToSave);
         showNotify('일정이 수정되었습니다.');
       } else if (repeat !== 'none' && repeatEndDate) {
-        // 반복 등록: 시작일부터 종료일까지 회차를 만들어 한 번에 등록합니다. (최대 60회)
         const dates: string[] = [];
         let cursor = parseISO(formData.date);
         const endDate = parseISO(repeatEndDate);
@@ -738,7 +706,6 @@ export default function App() {
     }
   };
 
-  // 반복 등록으로 만들어진 일정을, 앞으로 남은 회차까지 한 번에 지웁니다. (지난 회차는 남겨둡니다)
   const deleteSeries = async (seriesId: string, fromDate: string) => {
     const toDelete = schedules.filter(s => s.seriesId === seriesId && s.date >= fromDate);
     if (toDelete.length === 0) return;
@@ -754,7 +721,6 @@ export default function App() {
     }
   };
 
-  // Notification CRUD
   const saveNotif = async () => {
     if (!notifForm.title.trim()) return;
     try {
@@ -784,7 +750,6 @@ export default function App() {
     }
   };
 
-  // Teacher Actions
   const addTeacher = async () => {
     if (!newTeacherName.trim()) return;
     try {
@@ -817,10 +782,8 @@ export default function App() {
     if (teacher?.name === trimmedName) return;
 
     try {
-      // 1. Update teacher document
       await updateDoc(doc(db, 'teachers', id), { name: trimmedName });
       
-      // 2. Update denormalized name in all schedules
       const q = query(collection(db, 'schedules'));
       const snapshot = await getDocs(q);
       const batch = writeBatch(db);
@@ -842,27 +805,23 @@ export default function App() {
     }
   };
 
-  // Account Management Actions
   const createNewAccount = async () => {
     if (!newUserId.trim() || !newUserPw.trim()) return;
     try {
       const email = newUserId.includes('@') ? newUserId : `${newUserId}@edu.com`;
       
-      // Use secondary app to create user without logging out current admin
       const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
       const secondaryAuth = getAuth(secondaryApp);
       
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newUserPw);
       const newUid = userCredential.user.uid;
       
-      // Save user info to Firestore
       await updateDoc(doc(db, 'registered_users', newUid), {
         id: newUserId,
         email: email,
         role: 'user',
         createdAt: serverTimestamp()
       }).catch(async () => {
-        // If update fails, use setDoc
         const { setDoc } = await import('firebase/firestore');
         await setDoc(doc(db, 'registered_users', newUid), {
           id: newUserId,
@@ -897,7 +856,6 @@ export default function App() {
     }
   };
 
-  // Category Actions
   const updateCategories = async (type: 'programs' | 'locations' | 'targets', newList: string[]) => {
     try {
       await updateDoc(doc(db, 'settings', 'config'), { [type]: newList });
@@ -984,6 +942,13 @@ export default function App() {
     );
   }
 
+  // 디오라마 카드 배열 (PC 및 모바일/태블릿 동시 활용)
+  const DIORAMA_ITEMS = [
+    { name: '강릉분원', src: './logo.png', url: 'https://www.gninjae.or.kr' },
+    { name: '춘천본원', src: './logo-chuncheon.jpg', url: 'https://jinro.gwe.go.kr' },
+    { name: '원주분원', src: './logo-wonju.jpg', url: 'https://wj.gwe.go.kr' }
+  ];
+
   return (
     <div className="flex h-screen bg-bg-primary overflow-hidden font-sans select-none">
       {/* Mobile Header */}
@@ -1044,11 +1009,7 @@ export default function App() {
             </div>
             
             <div className="space-y-3">
-              {[
-                { name: '강릉분원', src: './logo.png', url: 'https://www.gninjae.or.kr' },
-                { name: '춘천본원', src: './logo-chuncheon.jpg', url: 'https://jinro.gwe.go.kr' },
-                { name: '원주분원', src: './logo-wonju.jpg', url: 'https://wj.gwe.go.kr' }
-              ].map(diorama => (
+              {DIORAMA_ITEMS.map(diorama => (
                 <div 
                   key={diorama.name} 
                   onClick={() => {
@@ -1079,7 +1040,7 @@ export default function App() {
           {user ? (
             <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2.5 text-text-muted hover:text-red-500 transition-colors text-sm font-medium"><LogOut size={18} /><span>로그아웃</span></button>
           ) : (
-            <button onClick={handleLogin} className="flex items-center gap-3 w-full px-4 py-2.5 text-accent-color hover:bg-blue-50 transition-colors text-sm font-bold"><LogIn size={18} /><span>로그인</span></button>
+            <button onClick={() => {}} className="flex items-center gap-3 w-full px-4 py-2.5 text-accent-color hover:bg-blue-50 transition-colors text-sm font-bold"><LogIn size={18} /><span>로그인</span></button>
           )}
         </div>
       </aside>
@@ -1144,7 +1105,6 @@ export default function App() {
                     {viewMode === 'teacher' ? '교사별 개인 시간표를 확인하세요' : '교육 프로그램 일정을 효율적으로 관리하세요'}
                   </p>
                   
-                  {/* Month/Year Picker Popover */}
                   <AnimatePresence>
                     {isDatePickerOpen && (
                       <motion.div 
@@ -1336,14 +1296,12 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="bg-surface rounded-2xl border border-border-color overflow-hidden shadow-sm min-h-[700px] flex flex-col">
-                    {/* Weekday Header */}
                     <div className="grid grid-cols-7 border-b border-border-color bg-soft">
                       {['월', '화', '수', '목', '금', '토', '일'].map(d => (
                         <div key={d} className={cn("py-3 text-center text-[10px] font-bold uppercase tracking-widest", d === '일' ? "text-sun" : d === '토' ? "text-sat" : "text-text-muted")}>{d}</div>
                       ))}
                     </div>
 
-                    {/* Monthly Grid */}
                     <div className="grid grid-cols-7 flex-1 divide-x divide-y divide-border-color">
                       {calendarDays.length > 0 ? (
                         calendarDays.map((dayDate, idx) => {
@@ -1533,7 +1491,6 @@ export default function App() {
 
                 {isSettingsOpen && (
                   <>
-                    {/* Backdrop */}
                     <motion.div 
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -1542,7 +1499,6 @@ export default function App() {
                       className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[110]"
                     />
                     
-                    {/* Settings Side Sheet */}
                     <motion.div 
                       initial={{ x: '100%' }}
                       animate={{ x: 0 }}
@@ -1564,7 +1520,6 @@ export default function App() {
                       </div>
 
                       <div className="flex-1 overflow-y-auto p-6 space-y-10 pb-24">
-                        {/* 강릉 방문예약 앱 연동 */}
                         <section className="space-y-4">
                           <div>
                             <h4 className="text-xs font-black text-text-main flex items-center gap-2 mb-2">
@@ -1601,7 +1556,6 @@ export default function App() {
                           </a>
                         </section>
 
-                        {/* App Config */}
                         {isAdmin && (
                           <section className="space-y-6">
                             <div>
@@ -1619,7 +1573,7 @@ export default function App() {
                                         onClick={() => {
                                           applyAccentColor(color);
                                           setAccentColor(color);
-                                          try { localStorage.setItem('eduAccentColorV1', color); } catch { /* 저장 실패는 무시 */ }
+                                          try { localStorage.setItem('eduAccentColorV1', color); } catch { }
                                           showNotify('테마 색상이 변경되었습니다.');
                                         }}
                                         className={cn(
@@ -1671,7 +1625,6 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* My Profile - Integrated here */}
                             <div className="pt-8 border-t border-gray-100">
                               <h4 className="text-xs font-black text-text-main flex items-center gap-2 mb-4">
                                 <UserIcon size={14} className="text-accent-color" />
@@ -1702,7 +1655,6 @@ export default function App() {
                           </section>
                         )}
 
-                    {/* Teacher Management Section */}
                     <section className="space-y-4 pt-4 border-t border-border-color">
                       <div className="flex items-center justify-between border-b border-border-color pb-2">
                         <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><Users size={14} />교사 명단 관리</h4>
@@ -1734,7 +1686,6 @@ export default function App() {
                       </div>
                     </section>
 
-                    {/* Category Management Section */}
                     <section className="space-y-6 pt-4 border-t border-border-color">
                       <div className="flex items-center justify-between border-b border-border-color pb-2">
                         <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><LayoutList size={14} />항목 카테고리 관리</h4>
@@ -1788,7 +1739,6 @@ export default function App() {
                       ))}
                     </section>
 
-                    {/* Account Management Section (Admin Only) */}
                     {isAdmin && (
                       <>
                       <section className="space-y-4 pt-4 border-t border-border-color">
@@ -1837,7 +1787,6 @@ export default function App() {
                         </div>
                       </section>
                       
-                      {/* Diorama Link Management (Admin Only) */}
                       <section className="space-y-4 pt-4 border-t border-border-color">
                         <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><MapPin size={14} />디오라마 링크 관리</h4>
                         <div className="space-y-3">
@@ -1961,8 +1910,6 @@ export default function App() {
 
 // --- Components ---
 
-// 강릉 방문예약 앱에 "같은 날짜·같은 실·겹치는 시간대(오전/오후)" 예약이 있으면 수업 카드에 작은 태그로 알려줍니다.
-// ===================== 업무 관리 (할 일 · 캘린더 · 업무 메모) =====================
 interface Todo {
   id: string;
   title: string;
@@ -1971,7 +1918,7 @@ interface Todo {
   tags?: string[];
   assigneeId?: string;
   assigneeName?: string;
-  dueDate?: string; // yyyy-MM-dd
+  dueDate?: string;
   note?: string;
   createdAt: any;
 }
@@ -1989,7 +1936,6 @@ const TODO_STATUSES: { id: Todo['status']; label: string }[] = [
   { id: 'done', label: '완료' },
 ];
 
-// 할 일 카테고리: 색은 index.css에 이미 정의된 팔레트(다크모드 대응)를 사용합니다.
 const TODO_CATEGORIES: { id: string; label: string; dot: string; bg: string; text: string; border: string }[] = [
   { id: 'prep',     label: '수업준비',   dot: 'bg-blue-500',   bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200' },
   { id: 'admin',    label: '행정',       dot: 'bg-green-500',  bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
@@ -2003,7 +1949,6 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
   const [subTab, setSubTab] = useState<'board' | 'calendar' | 'notes'>('board');
   const [boardView, setBoardView] = useState<'kanban' | 'list'>('kanban');
 
-  // ---- 할 일 (todos) ----
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [newAssignee, setNewAssignee] = useState('');
@@ -2055,7 +2000,6 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
     return byStatus;
   }, [todos]);
 
-  // 카테고리별로 묶어서 보여주는 목록 보기 (마감일 임박 순으로 정렬)
   const todosByCategory = useMemo(() => {
     const groups = TODO_CATEGORIES.map(c => ({ cat: c, items: [] as Todo[] }));
     todos.forEach((t: Todo) => {
@@ -2068,7 +2012,6 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
 
   const today = format(startOfToday(), 'yyyy-MM-dd');
 
-  // ---- 할 일 캘린더 ----
   const [calBaseDate, setCalBaseDate] = useState(startOfToday());
   const [calSelectedDate, setCalSelectedDate] = useState<string | null>(null);
   const calDays = useMemo(() => {
@@ -2086,7 +2029,6 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
     return map;
   }, [todos]);
 
-  // ---- 업무 메모 (handoffNotes) ----
   const [notes, setNotes] = useState<HandoffNote[]>([]);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteContent, setNoteContent] = useState('');
@@ -2113,12 +2055,11 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
     try { await deleteDoc(doc(db, 'handoffNotes', id)); } catch (err) { console.error(err); }
   };
 
-  // 할 일 카드/행 하나를 그리는 공용 컴포넌트 (칸반 카드와 목록 행에서 함께 씁니다)
   const TodoRow = ({ t, compact }: { t: Todo; compact?: boolean }) => {
     const overdue = t.dueDate && t.dueDate < today && t.status !== 'done';
     const cat = todoCategoryOf(t.category);
     return (
-      <div className={cn("p-3 bg-bg-primary rounded-xl border group", compact ? "flex items-center gap-3" : "border-border-color")} style={!compact ? { borderLeftColor: undefined } : undefined}>
+      <div className={cn("p-3 bg-bg-primary rounded-xl border group", compact ? "flex items-center gap-3" : "border-border-color")}>
         {compact && (
           <button
             onClick={() => moveTodo(t.id, t.status === 'done' ? 'todo' : 'done')}
@@ -2184,7 +2125,6 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
 
       {subTab === 'board' && (
         <div className="space-y-6">
-          {/* 새 할 일 추가 */}
           <div className="bg-surface rounded-2xl border border-border-color p-4 shadow-sm space-y-2">
             <div className="flex flex-col sm:flex-row gap-2">
               <input
@@ -2215,7 +2155,6 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
             </div>
           </div>
 
-          {/* 보드/목록 전환 */}
           <div className="flex justify-end">
             <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit shadow-sm">
               <button onClick={() => setBoardView('kanban')} className={cn("px-3 py-1 rounded-full text-[11px] font-bold transition-all", boardView === 'kanban' ? "bg-accent-color text-on-accent" : "text-text-muted")}>칸반 보드</button>
@@ -2368,7 +2307,6 @@ function GnLinkedTags({ schedule, entries, rooms }: { schedule: Schedule; entrie
   );
 }
 
-// 주간 달력에 표시되는 강릉 방문예약 카드 (읽기 전용)
 function GnEntryChip({ entry, rooms, onClick }: { entry: GnEntry; rooms: GnRoom[]; onClick?: () => void }) {
   return (
     <div
@@ -2453,7 +2391,6 @@ function LoginOverlay({
           </button>
         </form>
 
-        {/* Optional Google Login Divider */}
         <div className="relative my-8">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border-color" /></div>
           <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest"><span className="px-3 bg-surface text-text-muted/50">Admin Only</span></div>
