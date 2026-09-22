@@ -20,7 +20,9 @@ import {
   Camera,
   User as UserIcon,
   Link2,
-  ExternalLink
+  ExternalLink,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { 
   collection, 
@@ -128,6 +130,24 @@ const DEFAULT_LOCATIONS = ['1층 안전체험관', '1층 바리스타체험실',
 const DEFAULT_TARGETS = ['유초등', '중고등', '전공과'];
 const DAYS = ['월', '화', '수', '목', '금'];
 
+// 헥스 색상을 Tailwind CSS 변수 형식("R G B")으로 바꾸고, 그 위에 놓을 글자가
+// 흰색이 나을지 짙은 남색이 나을지 밝기로 판단합니다. (설정 > 앱 메인 컬러)
+function hexToRgbTriplet(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return `${r} ${g} ${b}`;
+}
+function readableOnColor(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '20 30 44' : '255 255 255';
+}
+function applyAccentColor(hex: string) {
+  document.documentElement.style.setProperty('--c-accent-color', hexToRgbTriplet(hex));
+  document.documentElement.style.setProperty('--c-on-accent', readableOnColor(hex));
+}
+
 export default function App() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -161,6 +181,21 @@ export default function App() {
   const [schedulesLoaded, setSchedulesLoaded] = useState(false); // 서버에서 수업 목록을 실제로 받아왔는지
   const gnRooms = useMemo(() => mergeRooms(gnCustomRooms), [gnCustomRooms]);
   const gnByDate = useMemo(() => entriesByDate(gnEntries), [gnEntries]);
+
+  // --- 화면 테마 (라이트/다크). 처음 값은 index.html 의 스크립트가 미리 적용해 둡니다. ---
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+  );
+  const [accentColor, setAccentColor] = useState<string | null>(() => {
+    try { return localStorage.getItem('eduAccentColorV1'); } catch { return null; }
+  });
+  useEffect(() => { if (accentColor) applyAccentColor(accentColor); }, [accentColor]);
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('eduThemeV1', next); } catch { /* 저장 실패는 무시 */ }
+  };
 
   // Dynamic Lists State
   const [programs, setPrograms] = useState<string[]>(DEFAULT_PROGRAMS);
@@ -827,14 +862,14 @@ export default function App() {
 
   if (!isAuthInitialCheckDone) {
     return (
-      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-[1000]">
+      <div className="fixed inset-0 bg-surface flex flex-col items-center justify-center z-[1000]">
         <motion.div 
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="flex flex-col items-center"
         >
-          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-200 mb-6 overflow-hidden p-2">
+          <div className="w-20 h-20 bg-surface rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-200 mb-6 overflow-hidden p-2">
             <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-xl font-bold text-text-main tracking-tight">{appName}</h2>
@@ -868,19 +903,20 @@ export default function App() {
   return (
     <div className="flex h-screen bg-bg-primary overflow-hidden font-sans select-none">
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-border-color z-40 px-4 h-14 flex items-center justify-between">
+      <header className="lg:hidden fixed top-0 left-0 right-0 bg-surface/80 backdrop-blur-md border-b border-border-color z-40 px-4 h-14 flex items-center justify-between">
         <div 
           onClick={() => { setViewMode('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           className="flex items-center gap-2 cursor-pointer"
         >
           <img src={appLogo} alt="Logo" className="w-7 h-7 object-contain" />
-          <span className="font-bold text-base tracking-tight text-accent-color">{appName}</span>
+          <span className="font-serif font-bold text-base tracking-tight text-accent-color">{appName}</span>
         </div>
         <div className="flex items-center gap-1">
+          <button onClick={toggleTheme} aria-label="라이트/다크 모드 전환" className="p-2 text-text-muted hover:text-accent-color transition-colors">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
           <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="p-2 text-text-muted hover:text-accent-color transition-colors"><Link2 size={20} /></a>
           <button onClick={scrollToNotifications} className="p-2 text-text-muted hover:text-accent-color transition-colors relative">
             <Bell size={20} />
-            <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+            <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" />
           </button>
           <div 
             onClick={() => setIsSettingsOpen(true)}
@@ -903,18 +939,18 @@ export default function App() {
           onClick={() => { setViewMode('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           className="flex items-center gap-3 px-2 mb-10 cursor-pointer hover:opacity-80 transition-opacity"
         >
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-border-color overflow-hidden p-1">
+          <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center shadow-md border border-border-color overflow-hidden p-1">
             <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-xl font-black text-accent-color tracking-tighter">{appName}</h1>
+          <h1 className="font-serif text-xl font-bold text-accent-color tracking-tight">{appName}</h1>
         </div>
         
         <nav className="flex-1 space-y-1">
-          <div onClick={() => { setViewMode('list'); setSelectedDay(null); }} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'list' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><LayoutList size={18} /><span>리스트 보기</span></div>
-          <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
-          <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
-          <div onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
-          <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><Link2 size={18} /><span>강릉 방문예약</span><span className={cn("ml-auto w-2 h-2 rounded-full", gnStatus === 'ok' ? "bg-green-500" : gnStatus === 'error' ? "bg-red-500" : "bg-gray-300")} /></a>
+          <div onClick={() => { setViewMode('list'); setSelectedDay(null); }} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'list' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><LayoutList size={18} /><span>리스트 보기</span></div>
+          <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
+          <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
+          <div onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
+          <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><Link2 size={18} /><span>강릉 방문예약</span><span className={cn("ml-auto w-2 h-2 rounded-full", gnStatus === 'ok' ? "bg-green-500" : gnStatus === 'error' ? "bg-red-500" : "bg-gray-300")} /></a>
           
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
@@ -938,10 +974,10 @@ export default function App() {
                       showNotify(`${diorama.name} 홈페이지 준비 중입니다.`);
                     }
                   }}
-                  className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-pointer group bg-white active:scale-95 transition-all"
+                  className="rounded-xl overflow-hidden border border-border-color shadow-sm cursor-pointer group bg-surface active:scale-95 transition-all"
                 >
                   <img src={diorama.src} alt={diorama.name} className="w-full h-20 object-cover group-hover:scale-110 transition-transform duration-700" />
-                  <div className="p-1.5 bg-white/80 backdrop-blur-sm border-t border-border-color/30">
+                  <div className="p-1.5 bg-surface/80 backdrop-blur-sm border-t border-border-color/30">
                     <p className="text-[8px] font-bold text-text-muted text-center">{diorama.name} 디오라마</p>
                   </div>
                 </div>
@@ -951,6 +987,10 @@ export default function App() {
         </nav>
 
         <div className="pt-6 border-t border-border-color">
+          <button onClick={toggleTheme} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-full text-text-muted hover:bg-gray-50 transition-colors text-sm font-medium mb-1">
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            <span>{theme === 'dark' ? '라이트 모드' : '다크 모드'}</span>
+          </button>
           {user ? (
             <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2.5 text-text-muted hover:text-red-500 transition-colors text-sm font-medium"><LogOut size={18} /><span>로그아웃</span></button>
           ) : (
@@ -961,7 +1001,7 @@ export default function App() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-[72px] bg-white border-b border-border-color flex items-center justify-between px-8 shrink-0">
+        <header className="h-[72px] bg-surface border-b border-border-color flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center gap-4 flex-1 max-w-md">
             <div className="relative w-full">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted/50" size={16} />
@@ -969,7 +1009,7 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="relative w-10 h-10 bg-bg-primary rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"><Bell size={18} className="text-text-main" /><span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" /></div>
+            <div className="relative w-10 h-10 bg-bg-primary rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"><Bell size={18} className="text-text-main" /><span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" /></div>
             <div className="flex items-center gap-3">
               {user && (
                 <div className="flex items-center gap-3">
@@ -996,17 +1036,17 @@ export default function App() {
         </header>
 
         {/* Content Viewport */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-10 pb-32 lg:pb-10 bg-[#FAFAFB]">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-10 pb-32 lg:pb-10 bg-bg-primary">
           <div className="max-w-[1400px] mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 lg:gap-12">
-              <div className="lg:col-span-3">
+              <div className="lg:col-span-4">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 lg:mb-12">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 md:shrink-0">
                     <div className="relative">
                   <h2 
                     onClick={() => (viewMode === 'calendar' || viewMode === 'teacher') && setIsDatePickerOpen(!isDatePickerOpen)} 
                     className={cn(
-                      "text-2xl font-bold text-text-main transition-all",
+                      "font-serif text-2xl font-bold text-text-main transition-all",
                       (viewMode === 'calendar' || viewMode === 'teacher') && "cursor-pointer hover:text-accent-color flex items-center gap-2 group"
                     )}
                   >
@@ -1025,7 +1065,7 @@ export default function App() {
                         initial={{ opacity: 0, y: 10 }} 
                         animate={{ opacity: 1, y: 0 }} 
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full left-0 mt-2 p-4 bg-white border border-border-color rounded-2xl shadow-2xl z-[50] min-w-[280px]"
+                        className="absolute top-full left-0 mt-2 p-4 bg-surface border border-border-color rounded-2xl shadow-2xl z-[50] min-w-[280px]"
                       >
                         <div className="flex items-center justify-between mb-4">
                           <button onClick={() => setBaseDate(subMonths(baseDate, 12))} className="p-1 hover:bg-gray-100 rounded-lg"><ChevronLeft size={16} /></button>
@@ -1045,7 +1085,7 @@ export default function App() {
                                 }}
                                 className={cn(
                                   "py-2 rounded-xl text-sm font-bold transition-all",
-                                  isSelected ? "bg-accent-color text-white shadow-md" : "hover:bg-gray-50 text-text-muted hover:text-text-main"
+                                  isSelected ? "bg-accent-color text-on-accent shadow-md" : "hover:bg-gray-50 text-text-muted hover:text-text-main"
                                 )}
                               >
                                 {i + 1}월
@@ -1066,33 +1106,33 @@ export default function App() {
                   </AnimatePresence>
                 </div>
                 {(viewMode === 'calendar' || viewMode === 'teacher') && (
-                  <div className="flex items-center gap-2 px-1 py-1 bg-white border border-border-color rounded-xl h-fit shrink-0">
-                    <button onClick={() => setCalendarView('week')} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-all", calendarView === 'week' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:text-text-main")}>주간</button>
-                    <button onClick={() => setCalendarView('month')} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-all", calendarView === 'month' ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:text-text-main")}>월간</button>
+                  <div className="flex items-center gap-2 px-1 py-1 bg-surface border border-border-color rounded-full h-fit shrink-0">
+                    <button onClick={() => setCalendarView('week')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all", calendarView === 'week' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>주간</button>
+                    <button onClick={() => setCalendarView('month')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all", calendarView === 'month' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>월간</button>
                   </div>
                 )}
               </div>
               <div className="flex items-center gap-3 w-full overflow-hidden">
                 {viewMode === 'list' ? (
-                  <div className="flex-1 flex p-1 bg-white border border-border-color rounded-xl overflow-x-auto no-scrollbar scroll-smooth">
-                    <button onClick={() => { setSelectedDay(null); }} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap", !selectedDay ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:text-text-main")}>전체</button>
-                    {DAYS.map(day => (<button key={day} onClick={() => { setSelectedDay(day); }} className={cn("px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap", selectedDay === day ? "bg-accent-color text-white shadow-sm" : "text-text-muted hover:text-text-main")}>{day}요일</button>))}
+                  <div className="flex-1 flex p-1 bg-surface border border-border-color rounded-full overflow-x-auto no-scrollbar scroll-smooth">
+                    <button onClick={() => { setSelectedDay(null); }} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap", !selectedDay ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>전체</button>
+                    {DAYS.map(day => (<button key={day} onClick={() => { setSelectedDay(day); }} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap", selectedDay === day ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>{day}요일</button>))}
                   </div>
                 ) : viewMode === 'calendar' || viewMode === 'teacher' ? (
                   <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => setBaseDate(subMonths(baseDate, 1))} className="p-2 bg-white border border-border-color rounded-lg hover:bg-gray-50 transition-colors"><ChevronLeft size={16} /></button>
-                    <button onClick={() => setBaseDate(startOfToday())} className="px-4 py-1.5 bg-white border border-border-color rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors">오늘</button>
-                    <button onClick={() => setBaseDate(addMonths(baseDate, 1))} className="p-2 bg-white border border-border-color rounded-lg hover:bg-gray-50 transition-colors"><ChevronRight size={16} /></button>
+                    <button onClick={() => setBaseDate(subMonths(baseDate, 1))} className="p-2 bg-surface border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronLeft size={16} /></button>
+                    <button onClick={() => setBaseDate(startOfToday())} className="px-4 py-1.5 bg-surface border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors">오늘</button>
+                    <button onClick={() => setBaseDate(addMonths(baseDate, 1))} className="p-2 bg-surface border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronRight size={16} /></button>
                   </div>
                 ) : null}
                 <div className="h-8 w-[1px] bg-border-color mx-1 shrink-0 hidden sm:block" />
-                <button onClick={() => setViewMode(prev => prev === 'list' ? 'calendar' : 'list')} className="bg-white border border-border-color rounded-xl hover:bg-gray-50 transition-colors text-text-main flex items-center gap-2 px-4 h-[40px] shadow-sm shrink-0">
+                <button onClick={() => setViewMode(prev => prev === 'list' ? 'calendar' : 'list')} className="bg-surface border border-border-color rounded-full hover:bg-gray-50 transition-colors text-text-main flex items-center gap-2 px-4 h-[40px] shadow-sm shrink-0">
                   {viewMode === 'list' ? <><CalendarDays size={16} className="text-accent-color" /><span className="text-xs font-bold whitespace-nowrap">달력 보기</span></> : <><LayoutList size={16} className="text-accent-color" /><span className="text-xs font-bold whitespace-nowrap">리스트 보기</span></>}
                 </button>
                 <button
                   onClick={() => setShowGnEntries(v => !v)}
                   title={gnStatus === 'error' ? gnError : '강릉분원 방문예약을 함께 표시합니다'}
-                  className={cn("border rounded-xl transition-colors flex items-center gap-2 px-4 h-[40px] shadow-sm shrink-0 text-xs font-bold whitespace-nowrap", showGnEntries ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-white border-border-color text-text-muted hover:bg-gray-50")}
+                  className={cn("border rounded-full transition-colors flex items-center gap-2 px-4 h-[40px] shadow-sm shrink-0 text-xs font-bold whitespace-nowrap", showGnEntries ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-surface border-border-color text-text-muted hover:bg-gray-50")}
                 >
                   <Link2 size={14} />
                   <span>방문예약 {showGnEntries ? '표시 중' : '숨김'}</span>
@@ -1102,9 +1142,9 @@ export default function App() {
             </div>
 
             {(viewMode === 'calendar' || viewMode === 'teacher') && calendarView === 'week' && (
-              <div className="flex p-1 bg-white border border-border-color rounded-xl mb-6 w-full sm:w-fit mx-auto shadow-sm overflow-x-auto no-scrollbar">
+              <div className="flex p-1 bg-surface border border-border-color rounded-full mb-6 w-full sm:w-fit mx-auto shadow-sm overflow-x-auto no-scrollbar">
                 {weeksOfCurrentMonth.map((week, idx) => (
-                  <button key={idx} onClick={() => setSelectedWeekIndex(idx)} className={cn("px-6 py-2 rounded-lg text-sm font-bold transition-all flex flex-col items-center min-w-[100px]", selectedWeekIndex === idx ? "bg-accent-color text-white shadow-md scale-105" : "text-text-muted hover:text-text-main")}>
+                  <button key={idx} onClick={() => setSelectedWeekIndex(idx)} className={cn("px-6 py-2 rounded-2xl text-sm font-bold transition-all flex flex-col items-center min-w-[100px]", selectedWeekIndex === idx ? "bg-accent-color text-on-accent shadow-md scale-105" : "text-text-muted hover:text-text-main")}>
                     <span>{idx + 1}주차</span>
                     <span className={cn("text-[10px] opacity-60 font-normal", selectedWeekIndex === idx ? "text-white" : "text-text-muted")}>
                       {safeFormat(week[0], 'M.d')}~{safeFormat(week[6], 'M.d')}
@@ -1115,9 +1155,9 @@ export default function App() {
             )}
 
             {viewMode === 'teacher' && (
-              <div className="flex p-1 bg-white border border-border-color rounded-xl mb-6 w-full sm:w-fit mx-auto shadow-sm overflow-x-auto no-scrollbar">
+              <div className="flex p-1 bg-surface border border-border-color rounded-full mb-6 w-full sm:w-fit mx-auto shadow-sm overflow-x-auto no-scrollbar">
                 {teachers.map((teacher) => (
-                  <button key={teacher.id} onClick={() => setSelectedTeacherId(teacher.id)} className={cn("px-6 py-2 rounded-lg text-sm font-bold transition-all min-w-[100px]", selectedTeacherId === teacher.id ? "bg-blue-600 text-white shadow-md" : "text-text-muted hover:text-text-main")}>
+                  <button key={teacher.id} onClick={() => setSelectedTeacherId(teacher.id)} className={cn("px-6 py-2 rounded-full text-sm font-bold transition-all min-w-[100px]", selectedTeacherId === teacher.id ? "bg-blue-600 text-white shadow-md" : "text-text-muted hover:text-text-main")}>
                     {teacher.name}
                   </button>
                 ))}
@@ -1128,8 +1168,8 @@ export default function App() {
             <div className="grid grid-cols-1 xl:grid-cols-[1fr,320px] gap-8">
               <div className="space-y-6">
                 {viewMode === 'list' ? (
-                  <div className="bg-white rounded-2xl border border-border-color overflow-hidden shadow-sm">
-                    <div className="px-6 py-4 border-b border-border-color flex items-center justify-between bg-[#FDFDFD]">
+                  <div className="bg-surface rounded-2xl border border-border-color overflow-hidden shadow-sm">
+                    <div className="px-6 py-4 border-b border-border-color flex items-center justify-between bg-soft">
                       <span className="text-sm font-bold text-text-main uppercase tracking-tight">수업 일정표</span>
                       <span className="text-xs font-medium text-text-muted">{filteredSchedules.length}개의 일정</span>
                     </div>
@@ -1158,12 +1198,12 @@ export default function App() {
                     </div>
                   </div>
                 ) : calendarView === 'week' ? (
-                  <div className="bg-white rounded-2xl border border-border-color overflow-hidden shadow-sm">
-                    <div className="grid grid-cols-7 border-b border-border-color bg-[#FDFDFD]">
+                  <div className="bg-surface rounded-2xl border border-border-color overflow-hidden shadow-sm">
+                    <div className="grid grid-cols-7 border-b border-border-color bg-soft">
                       {currentViewWeek.map((dayDate, idx) => (
                         <div key={idx} className={cn("py-4 text-center border-r border-border-color last:border-r-0", !safeIsSameMonth(dayDate, baseDate) && "opacity-30 bg-gray-50", safeIsSameDay(dayDate, startOfToday()) && "bg-blue-50/50")}>
-                          <span className="text-[10px] font-bold text-text-muted block mb-1 uppercase tracking-tighter">{safeFormat(dayDate, 'EEE', { locale: ko })}</span>
-                          <span className={cn("text-lg font-black", safeIsSameDay(dayDate, startOfToday()) ? "text-accent-color" : "text-text-main")}>{safeFormat(dayDate, 'd')}</span>
+                          <span className={cn("text-[10px] font-bold block mb-1 uppercase tracking-tighter", dayDate.getDay() === 0 ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-muted")}>{safeFormat(dayDate, 'EEE', { locale: ko })}</span>
+                          <span className={cn("font-serif text-lg font-bold", safeIsSameDay(dayDate, startOfToday()) ? "text-accent-color" : dayDate.getDay() === 0 ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-main")}>{safeFormat(dayDate, 'd')}</span>
                         </div>
                       ))}
                     </div>
@@ -1172,7 +1212,7 @@ export default function App() {
                         const dateStr = safeFormat(dayDate, 'yyyy-MM-dd');
                         const daySchedules = filteredSchedules.filter(s => s.date === dateStr);
                         return (
-                          <div key={idx} className={cn("p-2 space-y-2 min-h-[400px]", !safeIsSameMonth(dayDate, baseDate) ? "bg-gray-50/30" : "bg-white")}>
+                          <div key={idx} className={cn("p-2 space-y-2 min-h-[400px]", !safeIsSameMonth(dayDate, baseDate) ? "bg-gray-50/30" : "bg-surface")}>
                             {isAdmin && (
                               <button 
                                 onClick={() => { 
@@ -1199,11 +1239,11 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white rounded-2xl border border-border-color overflow-hidden shadow-sm min-h-[700px] flex flex-col">
+                  <div className="bg-surface rounded-2xl border border-border-color overflow-hidden shadow-sm min-h-[700px] flex flex-col">
                     {/* Weekday Header */}
-                    <div className="grid grid-cols-7 border-b border-border-color bg-[#FDFDFD]">
+                    <div className="grid grid-cols-7 border-b border-border-color bg-soft">
                       {['월', '화', '수', '목', '금', '토', '일'].map(d => (
-                        <div key={d} className="py-3 text-center text-[10px] font-bold text-text-muted uppercase tracking-widest">{d}</div>
+                        <div key={d} className={cn("py-3 text-center text-[10px] font-bold uppercase tracking-widest", d === '일' ? "text-sun" : d === '토' ? "text-sat" : "text-text-muted")}>{d}</div>
                       ))}
                     </div>
 
@@ -1227,13 +1267,14 @@ export default function App() {
                               }}
                               className={cn(
                                 "min-h-[120px] p-2 flex flex-col transition-colors hover:bg-gray-50/10 cursor-pointer group/cell",
-                                !isCurMonth ? "bg-gray-50/30 text-gray-300" : "bg-white text-text-main"
+                                !isCurMonth ? "bg-gray-50/30 text-gray-300" : "bg-surface text-text-main"
                               )}
                             >
                               <div className="flex justify-between items-start mb-2">
                                 <span className={cn(
-                                  "text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center transition-all",
-                                  isToday ? "bg-accent-color text-white shadow-sm" : "text-text-muted group-hover/cell:text-accent-color"
+                                  "font-serif text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center transition-all",
+                                  isToday ? "bg-accent-color text-on-accent shadow-sm" : dayDate.getDay() === 0 ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-muted group-hover/cell:text-accent-color",
+                                  !isCurMonth && !isToday && "opacity-50"
                                 )}>
                                   {safeFormat(dayDate, 'd')}
                                 </span>
@@ -1295,7 +1336,7 @@ export default function App() {
                   key={editingId ? 'edit' : 'new'}
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="bg-white rounded-2xl border border-border-color p-6 shadow-sm relative overflow-hidden"
+                  className="bg-surface rounded-2xl border border-border-color p-6 shadow-sm relative overflow-hidden"
                 >
                   <h3 className="text-sm font-bold text-text-main uppercase mb-6 flex items-center gap-2"><div className="w-1.5 h-4 bg-accent-color rounded-full" />{editingId ? '일정 수정' : '신규 일정 등록'}</h3>
                   <form onSubmit={handleSubmit} className="space-y-4">
@@ -1359,7 +1400,7 @@ export default function App() {
                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-text-muted/50 pointer-events-none" size={14} />
                       </div>
                     </div>
-                    <button type="submit" className="w-full py-3 bg-accent-color text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] mt-2 disabled:bg-gray-400 disabled:shadow-none">{editingId ? '수정 완료' : '일정 추가하기'}</button>
+                    <button type="submit" className="w-full py-3 bg-accent-color text-on-accent rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] mt-2 disabled:bg-gray-400 disabled:shadow-none">{editingId ? '수정 완료' : '일정 추가하기'}</button>
                     {editingId && (
                       <div className="flex gap-2">
                         <button type="button" onClick={() => deleteSchedule(editingId)} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl text-xs font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2 mt-2">
@@ -1388,7 +1429,7 @@ export default function App() {
                       animate={{ x: 0 }}
                       exit={{ x: '100%' }}
                       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                      className="fixed top-0 right-0 bottom-0 w-full max-w-[400px] bg-white shadow-2xl z-[120] flex flex-col border-l border-border-color"
+                      className="fixed top-0 right-0 bottom-0 w-full max-w-[400px] bg-surface shadow-2xl z-[120] flex flex-col border-l border-border-color"
                     >
                       <div className="flex items-center justify-between p-6 border-b border-border-color bg-gray-50/50">
                         <h3 className="text-base font-black text-text-main uppercase tracking-tight flex items-center gap-2">
@@ -1397,7 +1438,7 @@ export default function App() {
                         </h3>
                         <button 
                           onClick={() => setIsSettingsOpen(false)} 
-                          className="p-2 hover:bg-white rounded-full text-text-muted hover:text-text-main transition-all shadow-sm"
+                          className="p-2 hover:bg-surface rounded-full text-text-muted hover:text-text-main transition-all shadow-sm"
                         >
                           <X size={20} />
                         </button>
@@ -1453,23 +1494,30 @@ export default function App() {
                                 <div className="space-y-3">
                                   <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">앱 메인 컬러 (테마)</label>
                                   <div className="flex flex-wrap gap-3 p-3 bg-gray-50 rounded-2xl border border-border-color">
-                                    {['#3b82f6', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#0f172a'].map(color => (
-                                      <button 
+                                    {['#344b68', '#3b82f6', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b'].map(color => (
+                                      <button
                                         key={color}
                                         onClick={() => {
-                                          document.documentElement.style.setProperty('--accent-color', color);
+                                          applyAccentColor(color);
+                                          setAccentColor(color);
+                                          try { localStorage.setItem('eduAccentColorV1', color); } catch { /* 저장 실패는 무시 */ }
                                           showNotify('테마 색상이 변경되었습니다.');
                                         }}
-                                        className="w-8 h-8 rounded-full border-2 border-white shadow-sm transition-transform active:scale-90 hover:scale-110"
+                                        className={cn(
+                                          "w-8 h-8 rounded-full border-2 shadow-sm transition-transform active:scale-90 hover:scale-110",
+                                          (accentColor ?? '#344b68').toLowerCase() === color ? "border-text-main scale-110" : "border-surface"
+                                        )}
                                         style={{ backgroundColor: color }}
+                                        aria-label={`테마 색상 ${color}`}
                                       />
                                     ))}
                                   </div>
+                                  <p className="text-[10px] text-text-muted ml-1">기본값은 교회 캘린더와 어울리는 남색입니다. 이 브라우저에만 저장됩니다.</p>
                                 </div>
                                 <div className="space-y-3">
                                   <label className="text-[10px] font-bold text-text-muted uppercase tracking-widest ml-1">앱 로고 아이콘</label>
                                   <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-border-color">
-                                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-border-color overflow-hidden p-1">
+                                    <div className="w-16 h-16 bg-surface rounded-2xl flex items-center justify-center shadow-sm border border-border-color overflow-hidden p-1">
                                       {isLogoUploading ? (
                                         <div className="w-5 h-5 border-2 border-accent-color border-t-transparent rounded-full animate-spin" />
                                       ) : (
@@ -1477,7 +1525,7 @@ export default function App() {
                                       )}
                                     </div>
                                     <label className="flex-1">
-                                      <span className="inline-block px-4 py-2 bg-white border border-border-color rounded-xl text-xs font-bold text-text-main cursor-pointer hover:bg-gray-100 transition-colors shadow-sm">아이콘 변경</span>
+                                      <span className="inline-block px-4 py-2 bg-surface border border-border-color rounded-xl text-xs font-bold text-text-main cursor-pointer hover:bg-gray-100 transition-colors shadow-sm">아이콘 변경</span>
                                       <input type="file" accept="image/*" className="hidden" onChange={handleAppLogoUpload} />
                                     </label>
                                   </div>
@@ -1495,7 +1543,7 @@ export default function App() {
                                     />
                                     <button 
                                       onClick={() => handleUpdateAppName(appName)}
-                                      className="px-5 h-11 bg-accent-color text-white rounded-2xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-blue-500/20"
+                                      className="px-5 h-11 bg-accent-color text-on-accent rounded-2xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-blue-500/20"
                                     >
                                       저장
                                     </button>
@@ -1525,7 +1573,7 @@ export default function App() {
                                       const newName = (document.getElementById('my-display-name') as HTMLInputElement).value;
                                       if (newName) handleUpdateDisplayName(newName);
                                     }}
-                                    className="px-5 h-11 bg-text-main text-white rounded-2xl text-sm font-bold hover:bg-gray-800 transition-all shadow-lg"
+                                    className="px-5 h-11 bg-text-main text-bg-primary rounded-2xl text-sm font-bold hover:bg-gray-800 transition-all shadow-lg"
                                   >
                                     변경
                                   </button>
@@ -1542,7 +1590,7 @@ export default function App() {
                       </div>
                       <div className="flex gap-2">
                         <input type="text" placeholder="교사 이름 추가" className="flex-1 h-9 px-3 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTeacher()} />
-                        <button onClick={addTeacher} className="px-4 bg-accent-color text-white rounded-lg text-xs font-bold shadow-sm hover:bg-blue-700 transition-colors">추가</button>
+                        <button onClick={addTeacher} className="px-4 bg-accent-color text-on-accent rounded-lg text-xs font-bold shadow-sm hover:bg-blue-700 transition-colors">추가</button>
                       </div>
                       <div className="flex flex-wrap gap-2 pt-1">
                         {teachers.map(t => (
@@ -1646,7 +1694,7 @@ export default function App() {
                                 const pw = (document.getElementById('new-account-pw') as HTMLInputElement).value;
                                 if (id && pw) createNewAccount(id, pw);
                               }}
-                              className="px-3 h-9 bg-text-main text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
+                              className="px-3 h-9 bg-text-main text-bg-primary rounded-xl text-xs font-bold hover:bg-gray-800 transition-colors"
                             >
                               추가
                             </button>
@@ -1694,7 +1742,7 @@ export default function App() {
                     </motion.div>
                   </>
                 )}
-                <div id="system-notifications" className="bg-white rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm transition-all duration-500">
+                <div id="system-notifications" className="bg-surface rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm transition-all duration-500">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Bell size={14} className="text-yellow-500" />시스템 알림</h4>
                     {isAdmin && (
@@ -1753,7 +1801,7 @@ export default function App() {
       </div>
 
         {/* Mobile Bottom Navigation Bar */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-border-color z-[100] px-6 py-2 pb-safe flex items-center justify-between shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface/90 backdrop-blur-xl border-t border-border-color z-[100] px-6 py-2 pb-safe flex items-center justify-between shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
           <button onClick={() => { setViewMode('calendar'); setCalendarView('month'); }} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'calendar' && calendarView === 'month' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
             <CalendarDays size={20} strokeWidth={2.5} />
             <span className="text-[9px] font-black tracking-tighter">월간</span>
@@ -1771,7 +1819,7 @@ export default function App() {
                 document.getElementById('schedule-form')?.scrollIntoView({ behavior: 'smooth' });
                 setTimeout(() => document.getElementById('program-input')?.focus(), 100);
               }}
-              className="w-14 h-14 bg-accent-color text-white rounded-2xl shadow-xl shadow-blue-500/40 flex items-center justify-center border-4 border-white active:scale-90 transition-all group"
+              className="w-14 h-14 bg-accent-color text-on-accent rounded-2xl shadow-xl shadow-blue-500/40 flex items-center justify-center border-4 border-surface active:scale-90 transition-all group"
             >
               <Plus size={28} strokeWidth={3} className="group-active:rotate-90 transition-transform" />
             </button>
@@ -1787,7 +1835,7 @@ export default function App() {
           </button>
         </nav>
       </div>
-      <AnimatePresence>{showNotification && (<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-24 right-8 bg-text-main text-white px-6 py-4 rounded-2xl shadow-2xl z-[100] flex items-center gap-3 border border-gray-700"><Bell className="text-accent-color" size={18} /><span className="text-sm font-medium">{notificationMsg}</span></motion.div>)}</AnimatePresence>
+      <AnimatePresence>{showNotification && (<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-24 right-8 bg-text-main text-bg-primary px-6 py-4 rounded-2xl shadow-2xl z-[100] flex items-center gap-3 border border-gray-700"><Bell className="text-accent-color" size={18} /><span className="text-sm font-medium">{notificationMsg}</span></motion.div>)}</AnimatePresence>
     </div>
   );
 }
@@ -1853,10 +1901,10 @@ function LoginOverlay({
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[400px] bg-white rounded-[32px] border border-border-color p-8 lg:p-10 shadow-2xl shadow-blue-900/5 relative z-10"
+        className="w-full max-w-[400px] bg-surface rounded-[32px] border border-border-color p-8 lg:p-10 shadow-2xl shadow-blue-900/5 relative z-10"
       >
         <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center border border-border-color mb-6 shadow-sm p-2">
+          <div className="w-16 h-16 bg-surface rounded-2xl flex items-center justify-center border border-border-color mb-6 shadow-sm p-2">
             <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-black text-text-main tracking-tight mb-2">{appName}</h1>
@@ -1892,21 +1940,21 @@ function LoginOverlay({
           <button 
             type="submit" 
             disabled={isLoading}
-            className="w-full h-12 bg-accent-color text-white rounded-2xl text-sm font-bold shadow-xl shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
+            className="w-full h-12 bg-accent-color text-on-accent rounded-2xl text-sm font-bold shadow-xl shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
           >
-            {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : '로그인'}
+            {isLoading ? <div className="w-5 h-5 border-2 border-surface/30 border-t-white rounded-full animate-spin" /> : '로그인'}
           </button>
         </form>
 
         {/* Optional Google Login Divider */}
         <div className="relative my-8">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border-color" /></div>
-          <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest"><span className="px-3 bg-white text-text-muted/50">Admin Only</span></div>
+          <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest"><span className="px-3 bg-surface text-text-muted/50">Admin Only</span></div>
         </div>
 
         <button 
           onClick={onGoogleLogin}
-          className="w-full h-12 bg-white border border-border-color text-text-main rounded-2xl text-sm font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
+          className="w-full h-12 bg-surface border border-border-color text-text-main rounded-2xl text-sm font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
         >
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="" />
           <span>구글 계정으로 로그인</span>
