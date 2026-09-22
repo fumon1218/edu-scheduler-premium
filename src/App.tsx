@@ -2026,7 +2026,7 @@ export default function App() {
             </div>
           </div>
         </div>)}
-          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} />}
+          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} koreanHolidays={koreanHolidays} weatherDaily={weatherDaily} />}
       </div>
 
         {/* Mobile Bottom Navigation Bar */}
@@ -2110,7 +2110,7 @@ const TODO_CATEGORIES: { id: string; label: string; dot: string; bg: string; tex
 ];
 const todoCategoryOf = (id?: string) => TODO_CATEGORIES.find(c => c.id === (id || 'etc')) || TODO_CATEGORIES[TODO_CATEGORIES.length - 1];
 
-function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: string }) {
+function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { teachers: Teacher[]; authorName: string; koreanHolidays: Record<string, string>; weatherDaily: Record<string, { max: number; min: number; code: number }> }) {
   const [subTab, setSubTab] = useState<'board' | 'calendar' | 'notes'>('board');
   const [boardView, setBoardView] = useState<'kanban' | 'list'>('kanban');
 
@@ -2379,28 +2379,60 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
             </div>
             <div className="grid grid-cols-7 rounded-xl overflow-hidden border border-border-color">
               {['월', '화', '수', '목', '금', '토', '일'].map(d => (
-                <div key={d} className="text-center text-xs font-bold text-text-muted uppercase py-3 bg-bg-primary border-b border-border-color">{d}</div>
+                <div key={d} className={cn("text-center text-xs font-bold uppercase py-3 bg-bg-primary border-b border-border-color", d === '일' ? "text-sun" : d === '토' ? "text-sat" : "text-text-muted")}>{d}</div>
               ))}
               {calDays.map((d, idx) => {
                 const dateStr = format(d, 'yyyy-MM-dd');
                 const items = todosByDate[dateStr] || [];
                 const isCurMonth = isSameMonth(d, calBaseDate);
                 const isToday = isSameDay(d, startOfToday());
-                const cats: string[] = Array.from(new Set<string>(items.map((t: Todo) => t.category || 'etc'))).slice(0, 4);
+                const holidayName = koreanHolidays[dateStr];
+                const dayWeather = weatherDaily[dateStr];
+                const isOffDay = !!holidayName || d.getDay() === 0;
                 return (
                   <div
                     key={idx}
                     onClick={() => setCalSelectedDate(dateStr)}
                     className={cn(
-                      "min-h-[128px] p-2.5 border-b border-r border-border-color cursor-pointer transition-colors",
+                      "min-h-[128px] p-2.5 border-b border-r border-border-color cursor-pointer transition-colors flex flex-col",
                       !isCurMonth ? "bg-gray-50/30" : "bg-surface hover:bg-gray-50/50",
                       calSelectedDate === dateStr && "ring-2 ring-inset ring-accent-color"
                     )}
                   >
-                    <span className={cn("text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center", isToday ? "bg-accent-color text-on-accent" : !isCurMonth ? "text-gray-300" : "text-text-main")}>{format(d, 'd')}</span>
-                    <div className="flex gap-1.5 mt-2 flex-wrap items-center">
-                      {cats.map(cid => <span key={cid} className={cn("w-2 h-2 rounded-full", todoCategoryOf(cid).dot)} />)}
-                      {items.length > 0 && <span className="text-[11px] font-bold text-text-muted">{items.length}</span>}
+                    <div className="flex items-start justify-between gap-1 mb-1.5">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className={cn("text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center shrink-0", isToday ? "bg-accent-color text-on-accent" : !isCurMonth ? "text-gray-300" : isOffDay ? "text-sun" : "text-text-main")}>{format(d, 'd')}</span>
+                        {holidayName && <span className="text-[8px] font-bold text-sun truncate" title={holidayName}>{holidayName}</span>}
+                      </div>
+                      {dayWeather && (
+                        <span className="flex items-center gap-0.5 text-[9px] text-text-muted opacity-70 whitespace-nowrap shrink-0" title={weatherIconOf(dayWeather.code).label}>
+                          <span>{weatherIconOf(dayWeather.code).icon}</span>
+                          <span className="font-bold">{dayWeather.max}°/{dayWeather.min}°</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1 overflow-hidden">
+                      {items.slice(0, 3).map((t: Todo) => {
+                        const overdue = t.dueDate && t.dueDate < today && t.status !== 'done';
+                        const cat = todoCategoryOf(t.category);
+                        return (
+                          <div
+                            key={t.id}
+                            onClick={(e) => { e.stopPropagation(); setCalSelectedDate(dateStr); }}
+                            title={t.title}
+                            className={cn(
+                              "px-1.5 py-1 text-[9px] font-bold rounded border truncate flex items-center gap-1",
+                              t.status === 'done' ? "bg-gray-50 text-gray-400 border-gray-100 line-through" : overdue ? "bg-red-50 text-red-600 border-red-200" : cn(cat.bg, cat.text, cat.border)
+                            )}
+                          >
+                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", cat.dot)} />
+                            <span className="truncate">{t.title}</span>
+                          </div>
+                        );
+                      })}
+                      {items.length > 3 && (
+                        <div className="text-[8px] text-text-muted pl-1 font-bold italic opacity-60">+ {items.length - 3} more</div>
+                      )}
                     </div>
                   </div>
                 );
