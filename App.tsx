@@ -112,7 +112,6 @@ const KOREAN_HOLIDAYS: Record<string, string> = {
   '10-03': '개천절',
   '10-09': '한글날',
   '12-25': '성탄절',
-  // 2026년 가상 명절 예시 (필요시 추가)
   '2026-02-16': '설날 연휴',
   '2026-02-17': '설날',
   '2026-02-18': '설날 연휴',
@@ -122,11 +121,10 @@ const KOREAN_HOLIDAYS: Record<string, string> = {
 };
 
 const getHolidayName = (dateStr: string) => {
-  const monthDay = dateStr.slice(5); // MM-DD
+  const monthDay = dateStr.slice(5);
   return KOREAN_HOLIDAYS[dateStr] || KOREAN_HOLIDAYS[monthDay] || null;
 };
 
-// --- Types ---
 interface Schedule {
   id: string;
   day: string;
@@ -197,18 +195,15 @@ export default function App() {
   const [baseDate, setBaseDate] = useState(startOfToday());
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0); 
 
-  // --- 날씨 정보 상태 ---
   const [weather, setWeather] = useState<{ temp: number; text: string; icon: string } | null>({
     temp: 22,
     text: '맑음',
     icon: 'sun'
   });
 
-  // Teacher State
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
   const [newTeacherName, setNewTeacherName] = useState('');
-  const [isManagingTeachers, setIsManagingTeachers] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNotification, setShowNotification] = useState(false);
@@ -216,7 +211,6 @@ export default function App() {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // --- 강릉분원 연동 ---
   const [gnEntries, setGnEntries] = useState<GnEntry[]>([]);
   const [gnCustomRooms, setGnCustomRooms] = useState<GnRoom[]>([]);
   const [gnStatus, setGnStatus] = useState<'connecting' | 'ok' | 'error'>('connecting');
@@ -236,12 +230,6 @@ export default function App() {
     try { return localStorage.getItem('eduAccentColorV1'); } catch { return null; }
   });
   useEffect(() => { if (accentColor) applyAccentColor(accentColor); }, [accentColor]);
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('eduThemeV1', next); } catch { }
-  };
 
   const [programs, setPrograms] = useState<string[]>(DEFAULT_PROGRAMS);
   const [locations, setLocations] = useState<string[]>(DEFAULT_LOCATIONS);
@@ -268,8 +256,6 @@ export default function App() {
   });
 
   const [isAuthInitialCheckDone, setIsAuthInitialCheckDone] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isLogoUploading, setIsLogoUploading] = useState(false);
   const [appName, setAppName] = useState('EduScheduler');
   const [appLogo, setAppLogo] = useState('./app-logo.png');
 
@@ -329,14 +315,9 @@ export default function App() {
     });
   }, [schedules, searchTerm, selectedDay]);
 
-  const showNotify = (msg: string) => {
-    setNotificationMsg(msg);
-    setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 3000);
-  };
-
+  // ✅ 강릉분원 이미지 경로 수정 (logo-gangneung.jpg 적용)
   const DIORAMA_ITEMS = [
-    { name: '강릉분원', src: './logo.png', url: 'https://www.gninjae.or.kr' },
+    { name: '강릉분원', src: './logo-gangneung.jpg', url: 'https://www.gninjae.or.kr' },
     { name: '춘천본원', src: './logo-chuncheon.jpg', url: 'https://jinro.gwe.go.kr' },
     { name: '원주분원', src: './logo-wonju.jpg', url: 'https://wj.gwe.go.kr' }
   ];
@@ -354,7 +335,7 @@ export default function App() {
           <h1 className="font-serif text-sm font-bold text-accent-color truncate">{appName}</h1>
         </div>
         
-        {/* 디오라마 카드 영역 (수정된 일관 경로) */}
+        {/* 디오라마 카드 영역 */}
         <div className="space-y-3 mt-auto pt-6">
           {DIORAMA_ITEMS.map(diorama => (
             <div 
@@ -373,7 +354,7 @@ export default function App() {
 
       {/* Main Container */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 상단 뷰포트 / 헤더 내 실시간 날씨 영역 */}
+        {/* Header */}
         <header className="h-[72px] bg-surface border-b border-border-color flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center gap-4 flex-1 max-w-md">
             <div className="relative w-full">
@@ -392,7 +373,7 @@ export default function App() {
           )}
         </header>
 
-        {/* 달력 메인 뷰포트 */}
+        {/* Calendar Viewport */}
         <div className="flex-1 overflow-y-auto p-6 bg-bg-primary">
           <div className="bg-surface rounded-2xl border border-border-color shadow-sm overflow-hidden">
             <div className="grid grid-cols-7 border-b border-border-color bg-soft">
@@ -419,7 +400,6 @@ export default function App() {
                         {safeFormat(dayDate, 'd')}
                       </span>
                       
-                      {/* 국경일 / 공휴일 배지 표시 */}
                       {holidayName && (
                         <span className="text-[9px] font-black text-red-500 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-100 truncate">
                           {holidayName}
