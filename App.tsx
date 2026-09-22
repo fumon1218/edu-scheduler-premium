@@ -23,11 +23,7 @@ import {
   ExternalLink,
   Sun,
   Moon,
-  Cloud,
-  CloudRain,
-  Snowflake,
   ListChecks,
-  GripVertical,
   ClipboardList
 } from 'lucide-react';
 import { 
@@ -67,22 +63,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   format, 
   startOfMonth, 
-  endOfMonth, 
   startOfWeek, 
-  endOfWeek, 
-  eachDayOfInterval, 
   isSameMonth, 
   isSameDay, 
   addMonths, 
   subMonths, 
-  getWeek, 
   startOfToday,
   addDays,
-  getWeeksInMonth,
   getYear,
   getMonth,
-  getDate,
-  getDay,
   parseISO,
   isValid
 } from 'date-fns';
@@ -102,9 +91,8 @@ import {
 } from './lib/gangneungLink';
 import type { GnEntry, GnRoom } from './lib/gangneungLink';
 
-// --- 한국 주요 국경일 및 공휴일 데이터 (양력 & 연도별 명절 지원) ---
+// --- 한국 주요 국경일 및 공휴일 데이터 ---
 const KOREAN_HOLIDAYS: Record<string, string> = {
-  // 매년 고정 양력 국경일/공휴일
   '01-01': '신정',
   '03-01': '삼일절',
   '05-05': '어린이날',
@@ -113,8 +101,6 @@ const KOREAN_HOLIDAYS: Record<string, string> = {
   '10-03': '개천절',
   '10-09': '한글날',
   '12-25': '성탄절',
-  
-  // 2026년 명절 및 대체공휴일
   '2026-02-16': '설날 연휴',
   '2026-02-17': '설날',
   '2026-02-18': '설날 연휴',
@@ -127,7 +113,7 @@ const KOREAN_HOLIDAYS: Record<string, string> = {
 
 const getHolidayName = (dateStr: string) => {
   if (!dateStr) return null;
-  const monthDay = dateStr.slice(5); // MM-DD
+  const monthDay = dateStr.slice(5);
   return KOREAN_HOLIDAYS[dateStr] || KOREAN_HOLIDAYS[monthDay] || null;
 };
 
@@ -163,13 +149,6 @@ interface Teacher {
   createdAt: any;
 }
 
-interface SystemNotification {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: any;
-}
-
 const DEFAULT_PROGRAMS = ['코딩 영재반', '기초 파이썬', '웹 개발 입문', 'AI 창의 캠프', '방학 특강', '정기 코딩'];
 const DEFAULT_LOCATIONS = ['1층 안전체험관', '1층 바리스타체험실', '2층 쿠킹체험실', '2층 e스포츠체험실', '2층 장애이해교육실', '2층 동아리실'];
 const DEFAULT_TARGETS = ['유초등', '중고등', '전공과'];
@@ -202,11 +181,10 @@ export default function App() {
   const [baseDate, setBaseDate] = useState(startOfToday());
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0); 
 
-  // --- 실시간 날씨 불러오기 (Open-Meteo 무료 API 연동 - 강릉 기준) ---
+  // --- 날씨 정보 ---
   const [weather, setWeather] = useState<{ temp: number; text: string } | null>(null);
 
   useEffect(() => {
-    // 강릉 위도/경도 (37.7519, 128.8761) 날씨 조회
     fetch('https://api.open-meteo.com/v1/forecast?latitude=37.7519&longitude=128.8761&current_weather=true')
       .then(res => res.json())
       .then(data => {
@@ -230,12 +208,9 @@ export default function App() {
 
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
-  const [newTeacherName, setNewTeacherName] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState('');
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const [gnEntries, setGnEntries] = useState<GnEntry[]>([]);
@@ -246,7 +221,6 @@ export default function App() {
   const [showGnEntries, setShowGnEntries] = useState(true);
   const [schedulesLoaded, setSchedulesLoaded] = useState(false);
   const gnRooms = useMemo(() => mergeRooms(gnCustomRooms), [gnCustomRooms]);
-  const gnByDate = useMemo(() => entriesByDate(gnEntries), [gnEntries]);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
@@ -256,30 +230,6 @@ export default function App() {
   });
   useEffect(() => { if (accentColor) applyAccentColor(accentColor); }, [accentColor]);
 
-  const [programs, setPrograms] = useState<string[]>(DEFAULT_PROGRAMS);
-  const [locations, setLocations] = useState<string[]>(DEFAULT_LOCATIONS);
-  const [targets, setTargets] = useState<string[]>(DEFAULT_TARGETS);
-  const [dioramaUrls, setDioramaUrls] = useState<Record<string, string>>({
-    '강릉분원': '',
-    '춘천본원': '',
-    '원주분원': ''
-  });
-
-  const [formData, setFormData] = useState({
-    day: '월',
-    date: format(startOfToday(), 'yyyy-MM-dd'),
-    startTime: '10:00',
-    endTime: '12:00',
-    program: '',
-    location: '',
-    target: '',
-    teacherId: '',
-    category: 'class',
-    repeat: 'none' as 'none' | 'daily' | 'weekly' | 'monthly',
-    repeatEndDate: ''
-  });
-
-  const [isAuthInitialCheckDone, setIsAuthInitialCheckDone] = useState(false);
   const [appName, setAppName] = useState('EduScheduler');
   const [appLogo, setAppLogo] = useState('./app-logo.png');
 
@@ -308,7 +258,6 @@ export default function App() {
       } else {
         setIsAdmin(false);
       }
-      setIsAuthInitialCheckDone(true);
     });
     return () => unsubscribe();
   }, []);
@@ -339,18 +288,16 @@ export default function App() {
     });
   }, [schedules, searchTerm, selectedDay]);
 
-  // 디오라마 카드 목록
+  // ✅ 프로젝트 저장소 내 실제 디오라마 이미지 파일명 적용 (캐시 강제 갱신용 ?v=2 추가)
   const DIORAMA_ITEMS = [
-    { name: '강릉분원', src: './logo-gangneung.jpg', url: 'https://www.gninjae.or.kr' },
-    { name: '춘천본원', src: './logo-chuncheon.jpg', url: 'https://jinro.gwe.go.kr' },
-    { name: '원주분원', src: './logo-wonju.jpg', url: 'https://wj.gwe.go.kr' }
+    { name: '강릉분원', src: './logo.png?v=2', url: 'https://www.gninjae.or.kr' },
+    { name: '춘천본원', src: './logo-chuncheon.jpg?v=2', url: 'https://jinro.gwe.go.kr' },
+    { name: '원주분원', src: './logo-wonju.jpg?v=2', url: 'https://wj.gwe.go.kr' }
   ];
-
-  if (!isAuthInitialCheckDone) return null;
 
   return (
     <div className="flex h-screen bg-bg-primary overflow-hidden font-sans select-none">
-      {/* Sidebar */}
+      {/* Sidebar (Desktop) */}
       <aside className="hidden lg:flex w-64 bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
         <div className="flex items-center gap-3 px-2 mb-10 cursor-pointer">
           <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center shadow-md border border-border-color overflow-hidden p-1">
@@ -387,7 +334,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* 실시간 날씨 표시 */}
+          {/* 실시간 날씨 */}
           {weather && (
             <div className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-50/80 border border-blue-200 rounded-full text-xs font-bold text-blue-900 shadow-sm">
               <Sun className="text-amber-500 animate-spin-slow" size={16} />
@@ -397,7 +344,7 @@ export default function App() {
           )}
         </header>
 
-        {/* 달력 뷰포트 */}
+        {/* Calendar Viewport */}
         <div className="flex-1 overflow-y-auto p-6 bg-bg-primary">
           <div className="bg-surface rounded-2xl border border-border-color shadow-sm overflow-hidden">
             <div className="grid grid-cols-7 border-b border-border-color bg-soft">
@@ -424,7 +371,7 @@ export default function App() {
                         {safeFormat(dayDate, 'd')}
                       </span>
                       
-                      {/* 국경일 / 공휴일 표시 */}
+                      {/* 국경일 배지 */}
                       {holidayName && (
                         <span className="text-[9px] font-black text-red-500 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-100 truncate shadow-xs">
                           {holidayName}
