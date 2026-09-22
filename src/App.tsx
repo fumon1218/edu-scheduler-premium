@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, 
   Search, 
@@ -144,6 +144,67 @@ const DEFAULT_LOCATIONS = ['1층 안전체험관', '1층 바리스타체험실',
 const DEFAULT_TARGETS = ['유초등', '중고등', '전공과'];
 const DAYS = ['월', '화', '수', '목', '금'];
 
+// --- 실시간 날씨 (강릉) / 대한민국 공휴일 ---
+const GANGNEUNG_LAT = 37.7519;
+const GANGNEUNG_LON = 128.8761;
+
+const WEATHER_CODE_MAP: Record<number, { icon: string; label: string }> = {
+  0: { icon: '☀️', label: '맑음' },
+  1: { icon: '🌤️', label: '대체로 맑음' },
+  2: { icon: '⛅', label: '구름 조금' },
+  3: { icon: '☁️', label: '흐림' },
+  45: { icon: '🌫️', label: '안개' },
+  48: { icon: '🌫️', label: '짙은 안개' },
+  51: { icon: '🌦️', label: '약한 이슬비' },
+  53: { icon: '🌦️', label: '이슬비' },
+  55: { icon: '🌦️', label: '강한 이슬비' },
+  56: { icon: '🌧️', label: '어는 이슬비' },
+  57: { icon: '🌧️', label: '강한 어는 이슬비' },
+  61: { icon: '🌧️', label: '약한 비' },
+  63: { icon: '🌧️', label: '비' },
+  65: { icon: '🌧️', label: '강한 비' },
+  66: { icon: '🌧️', label: '어는 비' },
+  67: { icon: '🌧️', label: '강한 어는 비' },
+  71: { icon: '🌨️', label: '약한 눈' },
+  73: { icon: '🌨️', label: '눈' },
+  75: { icon: '❄️', label: '강한 눈' },
+  77: { icon: '❄️', label: '싸락눈' },
+  80: { icon: '🌦️', label: '약한 소나기' },
+  81: { icon: '🌦️', label: '소나기' },
+  82: { icon: '⛈️', label: '강한 소나기' },
+  85: { icon: '🌨️', label: '약한 눈소나기' },
+  86: { icon: '❄️', label: '강한 눈소나기' },
+  95: { icon: '⛈️', label: '뇌우' },
+  96: { icon: '⛈️', label: '우박 동반 뇌우' },
+  99: { icon: '⛈️', label: '강한 우박 동반 뇌우' },
+};
+const weatherIconOf = (code?: number) => (code !== undefined && WEATHER_CODE_MAP[code]) ? WEATHER_CODE_MAP[code] : { icon: '🌡️', label: '' };
+
+// 2026년 대한민국 공휴일 (정확한 법정 공휴일/대체공휴일 데이터를 우선 적용, 그 외 연도는 공휴일 API로 자동 보완)
+const KR_HOLIDAYS_STATIC: Record<string, string> = {
+  '2026-01-01': '신정',
+  '2026-02-16': '설날 연휴',
+  '2026-02-17': '설날',
+  '2026-02-18': '설날 연휴',
+  '2026-03-01': '삼일절',
+  '2026-03-02': '대체공휴일(삼일절)',
+  '2026-05-05': '어린이날',
+  '2026-05-24': '부처님오신날',
+  '2026-05-25': '대체공휴일(부처님오신날)',
+  '2026-06-03': '전국동시지방선거(임시공휴일)',
+  '2026-06-06': '현충일',
+  '2026-07-17': '제헌절',
+  '2026-08-15': '광복절',
+  '2026-08-17': '대체공휴일(광복절)',
+  '2026-09-24': '추석 연휴',
+  '2026-09-25': '추석',
+  '2026-09-26': '추석 연휴',
+  '2026-10-03': '개천절',
+  '2026-10-05': '대체공휴일(개천절)',
+  '2026-10-09': '한글날',
+  '2026-12-25': '크리스마스',
+};
+
 function hexToRgbTriplet(hex: string): string {
   const h = hex.replace('#', '');
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
@@ -203,6 +264,42 @@ export default function App() {
     try { return localStorage.getItem('eduAccentColorV1'); } catch { return null; }
   });
   useEffect(() => { if (accentColor) applyAccentColor(accentColor); }, [accentColor]);
+
+  // --- 실시간 날씨 (강릉, Open-Meteo) ---
+  const [weatherNow, setWeatherNow] = useState<{ temp: number; code: number } | null>(null);
+  const [weatherDaily, setWeatherDaily] = useState<Record<string, { max: number; min: number; code: number }>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const loadWeather = () => {
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${GANGNEUNG_LAT}&longitude=${GANGNEUNG_LON}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia%2FSeoul&forecast_days=16`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (!data || cancelled) return;
+          if (data.current) {
+            setWeatherNow({ temp: Math.round(data.current.temperature_2m), code: data.current.weather_code });
+          }
+          if (data.daily?.time) {
+            const map: Record<string, { max: number; min: number; code: number }> = {};
+            data.daily.time.forEach((dStr: string, i: number) => {
+              map[dStr] = {
+                max: Math.round(data.daily.temperature_2m_max[i]),
+                min: Math.round(data.daily.temperature_2m_min[i]),
+                code: data.daily.weather_code[i],
+              };
+            });
+            setWeatherDaily(map);
+          }
+        })
+        .catch(() => { /* 네트워크 오류 시 조용히 무시 */ });
+    };
+    loadWeather();
+    const interval = setInterval(loadWeather, 30 * 60 * 1000); // 30분마다 갱신
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // --- 대한민국 공휴일 (연도별 자동 보완) ---
+  const [koreanHolidays, setKoreanHolidays] = useState<Record<string, string>>({ ...KR_HOLIDAYS_STATIC });
+  const fetchedHolidayYearsRef = useRef<Set<number>>(new Set());
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
@@ -462,6 +559,27 @@ export default function App() {
       return [];
     }
   }, [baseDate]);
+
+  useEffect(() => {
+    if (calendarDays.length === 0) return;
+    const years = Array.from(new Set(calendarDays.map(d => getYear(d))));
+    const missing = years.filter(y => !fetchedHolidayYearsRef.current.has(y));
+    if (missing.length === 0) return;
+    missing.forEach(year => {
+      fetchedHolidayYearsRef.current.add(year);
+      fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/KR`)
+        .then(res => res.ok ? res.json() : [])
+        .then((list: { date: string; localName: string }[]) => {
+          if (!Array.isArray(list)) return;
+          setKoreanHolidays(prev => {
+            const next = { ...prev };
+            list.forEach(h => { if (!next[h.date]) next[h.date] = h.localName; });
+            return next;
+          });
+        })
+        .catch(() => { /* 네트워크 오류 시 정적 데이터로만 표시 */ });
+    });
+  }, [calendarDays]);
 
   const weeksOfCurrentMonth = useMemo(() => {
     const weeks = [];
@@ -944,7 +1062,7 @@ export default function App() {
 
   // 디오라마 카드 배열 (PC 및 모바일/태블릿 동시 활용)
   const DIORAMA_ITEMS = [
-    { name: '강릉분원', src: './logo.png', url: 'https://www.gninjae.or.kr' },
+    { name: '강릉분원', src: './diorama-gangneung.jpg', url: 'https://www.gninjae.or.kr' },
     { name: '춘천본원', src: './logo-chuncheon.jpg', url: 'https://jinro.gwe.go.kr' },
     { name: '원주분원', src: './logo-wonju.jpg', url: 'https://wj.gwe.go.kr' }
   ];
@@ -1157,6 +1275,15 @@ export default function App() {
                     <button onClick={() => setCalendarView('month')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all", calendarView === 'month' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>월간</button>
                   </div>
                 )}
+                {viewMode === 'calendar' && weatherNow && (
+                  <div className="flex items-center gap-2 px-4 py-1.5 bg-surface border border-border-color rounded-full h-fit shrink-0 shadow-sm" title={`강릉분원 실시간 날씨 · ${weatherIconOf(weatherNow.code).label}`}>
+                    <span className="text-lg leading-none">{weatherIconOf(weatherNow.code).icon}</span>
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-xs font-bold text-text-main whitespace-nowrap">강릉 {weatherNow.temp}°C</span>
+                      <span className="text-[9px] text-text-muted whitespace-nowrap">{weatherIconOf(weatherNow.code).label}</span>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3 w-full overflow-hidden">
                 {viewMode === 'list' ? (
@@ -1256,12 +1383,20 @@ export default function App() {
                 ) : calendarView === 'week' ? (
                   <div className="bg-surface rounded-2xl border border-border-color overflow-hidden shadow-sm">
                     <div className="grid grid-cols-7 border-b border-border-color bg-soft">
-                      {currentViewWeek.map((dayDate, idx) => (
-                        <div key={idx} className={cn("py-4 text-center border-r border-border-color last:border-r-0", !safeIsSameMonth(dayDate, baseDate) && "opacity-30 bg-gray-50", safeIsSameDay(dayDate, startOfToday()) && "bg-blue-50/50")}>
-                          <span className={cn("text-[10px] font-bold block mb-1 uppercase tracking-tighter", dayDate.getDay() === 0 ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-muted")}>{safeFormat(dayDate, 'EEE', { locale: ko })}</span>
-                          <span className={cn("font-serif text-lg font-bold", safeIsSameDay(dayDate, startOfToday()) ? "text-accent-color" : dayDate.getDay() === 0 ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-main")}>{safeFormat(dayDate, 'd')}</span>
-                        </div>
-                      ))}
+                      {currentViewWeek.map((dayDate, idx) => {
+                        const dateStr = safeFormat(dayDate, 'yyyy-MM-dd');
+                        const holidayName = koreanHolidays[dateStr];
+                        const dayWeather = weatherDaily[dateStr];
+                        const isOffDay = !!holidayName || dayDate.getDay() === 0;
+                        return (
+                          <div key={idx} className={cn("py-4 text-center border-r border-border-color last:border-r-0", !safeIsSameMonth(dayDate, baseDate) && "opacity-30 bg-gray-50", safeIsSameDay(dayDate, startOfToday()) && "bg-blue-50/50")}>
+                            <span className={cn("text-[10px] font-bold block mb-1 uppercase tracking-tighter", isOffDay ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-muted")}>{safeFormat(dayDate, 'EEE', { locale: ko })}</span>
+                            <span className={cn("font-serif text-lg font-bold block", safeIsSameDay(dayDate, startOfToday()) ? "text-accent-color" : isOffDay ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-main")}>{safeFormat(dayDate, 'd')}</span>
+                            {holidayName && <span className="text-[8px] font-bold text-sun block mt-0.5 truncate px-1" title={holidayName}>{holidayName}</span>}
+                            {dayWeather && <span className="text-[9px] text-text-muted block mt-0.5 opacity-70 whitespace-nowrap">{weatherIconOf(dayWeather.code).icon} {dayWeather.max}°/{dayWeather.min}°</span>}
+                          </div>
+                        );
+                      })}
                     </div>
                     <div className="grid grid-cols-7 min-h-[550px] divide-x divide-border-color">
                       {currentViewWeek.map((dayDate, idx) => {
@@ -1309,6 +1444,9 @@ export default function App() {
                           const daySchedules = filteredSchedules.filter(s => s.date === dateStr);
                           const isToday = safeIsSameDay(dayDate, startOfToday());
                           const isCurMonth = safeIsSameMonth(dayDate, baseDate);
+                          const holidayName = koreanHolidays[dateStr];
+                          const dayWeather = weatherDaily[dateStr];
+                          const isOffDay = !!holidayName || dayDate.getDay() === 0;
 
                           return (
                             <div 
@@ -1324,15 +1462,28 @@ export default function App() {
                                 !isCurMonth ? "bg-gray-50/30 text-gray-300" : "bg-surface text-text-main"
                               )}
                             >
-                              <div className="flex justify-between items-start mb-2">
-                                <span className={cn(
-                                  "font-serif text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center transition-all",
-                                  isToday ? "bg-accent-color text-on-accent shadow-sm" : dayDate.getDay() === 0 ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-muted group-hover/cell:text-accent-color",
-                                  !isCurMonth && !isToday && "opacity-50"
-                                )}>
-                                  {safeFormat(dayDate, 'd')}
-                                </span>
-                                <Plus size={12} className="text-gray-200 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
+                              <div className="flex justify-between items-start mb-1 gap-1">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className={cn(
+                                    "font-serif text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center transition-all shrink-0",
+                                    isToday ? "bg-accent-color text-on-accent shadow-sm" : isOffDay ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-muted group-hover/cell:text-accent-color",
+                                    !isCurMonth && !isToday && "opacity-50"
+                                  )}>
+                                    {safeFormat(dayDate, 'd')}
+                                  </span>
+                                  {holidayName && (
+                                    <span className="text-[8px] font-bold text-sun truncate" title={holidayName}>{holidayName}</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {dayWeather && (
+                                    <span className="flex items-center gap-0.5 text-[9px] text-text-muted opacity-70 whitespace-nowrap" title={weatherIconOf(dayWeather.code).label}>
+                                      <span>{weatherIconOf(dayWeather.code).icon}</span>
+                                      <span className="font-bold">{dayWeather.max}°/{dayWeather.min}°</span>
+                                    </span>
+                                  )}
+                                  <Plus size={12} className="text-gray-200 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
+                                </div>
                               </div>
 
                               <div className="flex-1 space-y-1">
