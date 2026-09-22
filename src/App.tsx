@@ -1285,7 +1285,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-3 w-full overflow-hidden">
+              <div className="flex items-center gap-3 w-full overflow-x-auto no-scrollbar scroll-smooth pb-1">
                 {viewMode === 'list' ? (
                   <div className="flex-1 flex p-1 bg-surface border border-border-color rounded-full overflow-x-auto no-scrollbar scroll-smooth">
                     <button onClick={() => { setSelectedDay(null); }} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap", !selectedDay ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>전체</button>
@@ -1424,6 +1424,7 @@ export default function App() {
                             )}
                             {daySchedules.map(s => (<motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} key={s.id} onClick={() => handleEdit(s)} className={cn("p-2 rounded-xl border-l-4 border border-border-color bg-bg-primary hover:border-accent-color hover:shadow-md transition-all cursor-pointer group relative", categoryOf(s.category).border)}><div className="flex items-center gap-1 mb-0.5"><span className="text-[9px] font-bold text-accent-color">{s.startTime}</span>{s.seriesId && <span className="text-[8px]" title="반복 일정">🔁</span>}</div><h4 className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate">{s.program}</h4><div className="text-[9px] text-text-muted truncate opacity-80">{s.location}</div>{viewMode !== 'teacher' && <div className="text-[8px] font-bold text-gray-400 mt-1">{s.teacherName}</div>}</motion.div>))}
                             {showGnEntries && viewMode === 'calendar' && (gnByDate.get(dateStr) || []).map(e => <GnEntryChip key={'gn-' + e.id} entry={e} rooms={gnRooms} onClick={() => { setGnDetailDate(dateStr); setTimeout(() => document.getElementById('gn-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />)}
+                            {showGnEntries && viewMode === 'teacher' && (gnByDate.get(dateStr) || []).filter(e => gnEntryTeachers[e.id] === selectedTeacherId).map(e => <GnEntryChip key={'gn-' + e.id} entry={e} rooms={gnRooms} onClick={() => { setGnDetailDate(dateStr); setTimeout(() => document.getElementById('gn-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />)}
                           </div>
                         );
                       })}
@@ -1516,6 +1517,19 @@ export default function App() {
                                     className="px-1.5 py-1 bg-amber-50 text-amber-700 text-[9px] font-bold rounded border border-amber-200 truncate cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-all"
                                   >
                                     🔗 방문예약 {(gnByDate.get(dateStr) || []).length}건
+                                  </div>
+                                )}
+                                {showGnEntries && viewMode === 'teacher' && (gnByDate.get(dateStr) || []).filter(e => gnEntryTeachers[e.id] === selectedTeacherId).length > 0 && (
+                                  <div
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setGnDetailDate(dateStr);
+                                      setTimeout(() => document.getElementById('gn-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                                    }}
+                                    title={(gnByDate.get(dateStr) || []).filter(e => gnEntryTeachers[e.id] === selectedTeacherId).map(e => `${e.session === 'AM' ? '오전' : '오후'} ${roomLabel(gnRooms, e.room)} · ${e.org} ${e.count}명`).join('\n') + '\n\n클릭하면 아래에서 자세히 볼 수 있습니다'}
+                                    className="px-1.5 py-1 bg-amber-50 text-amber-700 text-[9px] font-bold rounded border border-amber-200 truncate cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-all"
+                                  >
+                                    🔗 방문예약 {(gnByDate.get(dateStr) || []).filter(e => gnEntryTeachers[e.id] === selectedTeacherId).length}건
                                   </div>
                                 )}
                               </div>
