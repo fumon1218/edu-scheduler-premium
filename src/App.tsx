@@ -154,8 +154,8 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'teacher'>('list');
-  const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'teacher'>('calendar');
+  const [calendarView, setCalendarView] = useState<'week' | 'month'>('month');
   const [baseDate, setBaseDate] = useState(startOfToday());
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0); 
   
