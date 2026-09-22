@@ -2045,11 +2045,13 @@ export default function App() {
 // --- Components ---
 
 // 강릉 방문예약 앱에 "같은 날짜·같은 실·겹치는 시간대(오전/오후)" 예약이 있으면 수업 카드에 작은 태그로 알려줍니다.
-// ===================== 업무 관리 (할 일 · 칸반보드 · 인수인계 메모) =====================
+// ===================== 업무 관리 (할 일 · 캘린더 · 업무 메모) =====================
 interface Todo {
   id: string;
   title: string;
   status: 'todo' | 'doing' | 'done';
+  category?: string;
+  tags?: string[];
   assigneeId?: string;
   assigneeName?: string;
   dueDate?: string; // yyyy-MM-dd
@@ -2070,14 +2072,27 @@ const TODO_STATUSES: { id: Todo['status']; label: string }[] = [
   { id: 'done', label: '완료' },
 ];
 
+// 할 일 카테고리: 색은 index.css에 이미 정의된 팔레트(다크모드 대응)를 사용합니다.
+const TODO_CATEGORIES: { id: string; label: string; dot: string; bg: string; text: string; border: string }[] = [
+  { id: 'prep',     label: '수업준비',   dot: 'bg-blue-500',   bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200' },
+  { id: 'admin',    label: '행정',       dot: 'bg-green-500',  bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
+  { id: 'facility', label: '시설/비품',  dot: 'bg-amber-500',  bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
+  { id: 'counsel',  label: '상담',       dot: 'bg-yellow-500', bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
+  { id: 'etc',      label: '기타',       dot: 'bg-gray-400',   bg: 'bg-gray-50',   text: 'text-gray-600',   border: 'border-gray-200' },
+];
+const todoCategoryOf = (id?: string) => TODO_CATEGORIES.find(c => c.id === (id || 'etc')) || TODO_CATEGORIES[TODO_CATEGORIES.length - 1];
+
 function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: string }) {
-  const [subTab, setSubTab] = useState<'board' | 'notes'>('board');
+  const [subTab, setSubTab] = useState<'board' | 'calendar' | 'notes'>('board');
+  const [boardView, setBoardView] = useState<'kanban' | 'list'>('kanban');
 
   // ---- 할 일 (todos) ----
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [newAssignee, setNewAssignee] = useState('');
   const [newDue, setNewDue] = useState('');
+  const [newCategory, setNewCategory] = useState('etc');
+  const [newTagsText, setNewTagsText] = useState('');
 
   useEffect(() => {
     const q = query(collection(db, 'todos'), orderBy('createdAt', 'desc'));
@@ -2090,15 +2105,18 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
     if (!newTitle.trim()) return;
     try {
       const assigneeName = teachers.find(t => t.id === newAssignee)?.name || '';
+      const tags = newTagsText.split(',').map(t => t.trim()).filter(Boolean);
       await addDoc(collection(db, 'todos'), {
         title: newTitle.trim(),
         status: 'todo',
+        category: newCategory,
+        tags,
         assigneeId: newAssignee || null,
         assigneeName: assigneeName || null,
         dueDate: newDue || null,
         createdAt: Timestamp.now(),
       });
-      setNewTitle(''); setNewAssignee(''); setNewDue('');
+      setNewTitle(''); setNewAssignee(''); setNewDue(''); setNewCategory('etc'); setNewTagsText('');
     } catch (err) { console.error(err); }
   };
 
@@ -2120,9 +2138,38 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
     return byStatus;
   }, [todos]);
 
+  // 카테고리별로 묶어서 보여주는 목록 보기 (마감일 임박 순으로 정렬)
+  const todosByCategory = useMemo(() => {
+    const groups = TODO_CATEGORIES.map(c => ({ cat: c, items: [] as Todo[] }));
+    todos.forEach((t: Todo) => {
+      const g = groups.find(g => g.cat.id === (t.category || 'etc')) || groups[groups.length - 1];
+      g.items.push(t);
+    });
+    groups.forEach(g => g.items.sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99')));
+    return groups.filter(g => g.items.length > 0);
+  }, [todos]);
+
   const today = format(startOfToday(), 'yyyy-MM-dd');
 
-  // ---- 인수인계 메모 (handoffNotes) ----
+  // ---- 할 일 캘린더 ----
+  const [calBaseDate, setCalBaseDate] = useState(startOfToday());
+  const [calSelectedDate, setCalSelectedDate] = useState<string | null>(null);
+  const calDays = useMemo(() => {
+    try {
+      const monthStart = startOfMonth(calBaseDate);
+      if (!isValid(monthStart)) return [];
+      const startOfGrid = startOfWeek(monthStart, { weekStartsOn: 1 });
+      if (!isValid(startOfGrid)) return [];
+      return Array.from({ length: 42 }).map((_, i) => addDays(startOfGrid, i));
+    } catch { return []; }
+  }, [calBaseDate]);
+  const todosByDate = useMemo(() => {
+    const map: Record<string, Todo[]> = {};
+    todos.forEach((t: Todo) => { if (t.dueDate) (map[t.dueDate] ||= []).push(t); });
+    return map;
+  }, [todos]);
+
+  // ---- 업무 메모 (handoffNotes) ----
   const [notes, setNotes] = useState<HandoffNote[]>([]);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteContent, setNoteContent] = useState('');
@@ -2149,95 +2196,221 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
     try { await deleteDoc(doc(db, 'handoffNotes', id)); } catch (err) { console.error(err); }
   };
 
+  // 할 일 카드/행 하나를 그리는 공용 컴포넌트 (칸반 카드와 목록 행에서 함께 씁니다)
+  const TodoRow = ({ t, compact }: { t: Todo; compact?: boolean }) => {
+    const overdue = t.dueDate && t.dueDate < today && t.status !== 'done';
+    const cat = todoCategoryOf(t.category);
+    return (
+      <div className={cn("p-3 bg-bg-primary rounded-xl border group", compact ? "flex items-center gap-3" : "border-border-color")} style={!compact ? { borderLeftColor: undefined } : undefined}>
+        {compact && (
+          <button
+            onClick={() => moveTodo(t.id, t.status === 'done' ? 'todo' : 'done')}
+            className={cn("w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all", t.status === 'done' ? "bg-green-500 border-green-500" : "border-border-color hover:border-accent-color")}
+            title={t.status === 'done' ? '완료 취소' : '완료로 표시'}
+          >
+            {t.status === 'done' && <span className="text-white text-[10px] font-bold">✓</span>}
+          </button>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <p className={cn("text-sm font-semibold text-text-main flex-1", t.status === 'done' && "line-through opacity-50")}>{t.title}</p>
+            <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><X size={14} /></button>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1", cat.bg, cat.text)}><span className={cn("w-1.5 h-1.5 rounded-full", cat.dot)} />{cat.label}</span>
+            {(t.tags || []).map(tag => (
+              <span key={tag} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">#{tag}</span>
+            ))}
+            {t.assigneeName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-accent-color">{t.assigneeName}</span>}
+            {t.dueDate && <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", overdue ? "bg-red-50 text-red-500" : "bg-gray-100 text-text-muted")}>{t.dueDate}{overdue ? ' 지남' : ''}</span>}
+          </div>
+          {!compact && (
+            <div className="flex gap-1.5 mt-3">
+              {TODO_STATUSES.filter(s => s.id !== t.status).map(s => (
+                <button key={s.id} onClick={() => moveTodo(t.id, s.id)} className="flex-1 h-7 rounded-lg text-[10px] font-bold bg-surface border border-border-color text-text-muted hover:border-accent-color hover:text-accent-color transition-all">
+                  → {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {compact && (
+            <div className="flex gap-1.5 mt-2">
+              <select value={t.status} onChange={(e) => moveTodo(t.id, e.target.value as Todo['status'])} className="h-7 px-2 bg-surface border border-border-color rounded-lg text-[10px] font-bold outline-none">
+                {TODO_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-[1400px] mx-auto">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div>
           <h2 className="font-serif text-2xl font-bold text-text-main">업무 관리</h2>
-          <p className="text-sm text-text-muted mt-1">할 일과 인수인계 사항을 팀과 함께 관리하세요</p>
+          <p className="text-sm text-text-muted mt-1">할 일과 업무 메모를 팀과 함께 관리하세요</p>
         </div>
-        <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit shadow-sm">
-          <button onClick={() => setSubTab('board')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5", subTab === 'board' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
-            <ListChecks size={14} /> 할 일 보드
+        <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit shadow-sm overflow-x-auto no-scrollbar">
+          <button onClick={() => setSubTab('board')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap", subTab === 'board' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
+            <ListChecks size={14} /> 할 일
           </button>
-          <button onClick={() => setSubTab('notes')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5", subTab === 'notes' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
-            <ClipboardList size={14} /> 인수인계 메모
+          <button onClick={() => setSubTab('calendar')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap", subTab === 'calendar' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
+            <CalendarDays size={14} /> 캘린더
+          </button>
+          <button onClick={() => setSubTab('notes')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap", subTab === 'notes' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
+            <ClipboardList size={14} /> 업무 메모
           </button>
         </div>
       </div>
 
-      {subTab === 'board' ? (
+      {subTab === 'board' && (
         <div className="space-y-6">
           {/* 새 할 일 추가 */}
-          <div className="bg-surface rounded-2xl border border-border-color p-4 shadow-sm flex flex-col sm:flex-row gap-2">
-            <input
-              type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') addTodo(); }}
-              placeholder="새 할 일 제목을 입력하세요"
-              className="flex-1 h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color"
-            />
-            <select value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color">
-              <option value="">담당자 미지정</option>
-              {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-            <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
-            <button onClick={addTodo} className="h-10 px-5 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all flex items-center gap-1.5 justify-center shrink-0">
-              <Plus size={16} /> 추가
-            </button>
+          <div className="bg-surface rounded-2xl border border-border-color p-4 shadow-sm space-y-2">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addTodo(); }}
+                placeholder="새 할 일 제목을 입력하세요"
+                className="flex-1 h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color"
+              />
+              <select value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color">
+                <option value="">담당자 미지정</option>
+                {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color">
+                {TODO_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+              <input
+                type="text" value={newTagsText} onChange={(e) => setNewTagsText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addTodo(); }}
+                placeholder="태그 (쉼표로 구분, 예: 긴급, 10월)"
+                className="flex-1 h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color"
+              />
+              <button onClick={addTodo} className="h-10 px-5 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all flex items-center gap-1.5 justify-center shrink-0">
+                <Plus size={16} /> 추가
+              </button>
+            </div>
           </div>
 
-          {/* 칸반 보드: 3열 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {TODO_STATUSES.map((col) => (
-              <div key={col.id} className="bg-surface rounded-2xl border border-border-color p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-text-main uppercase flex items-center gap-2">
-                    <span className={cn("w-2 h-2 rounded-full", col.id === 'todo' ? "bg-gray-400" : col.id === 'doing' ? "bg-amber-500" : "bg-green-500")} />
-                    {col.label}
-                  </h3>
-                  <span className="text-[10px] font-bold text-text-muted bg-bg-primary px-2 py-0.5 rounded-full">{columns[col.id].length}</span>
-                </div>
-                <div className="space-y-2 min-h-[80px]">
-                  {columns[col.id].length === 0 && (
-                    <p className="text-[11px] text-text-muted italic text-center py-6">항목이 없습니다</p>
-                  )}
-                  {columns[col.id].map(t => {
-                    const overdue = t.dueDate && t.dueDate < today && t.status !== 'done';
-                    return (
-                      <div key={t.id} className="p-3 bg-bg-primary rounded-xl border border-border-color group">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className={cn("text-sm font-semibold text-text-main flex-1", t.status === 'done' && "line-through opacity-50")}>{t.title}</p>
-                          <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><X size={14} /></button>
-                        </div>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          {t.assigneeName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-accent-color">{t.assigneeName}</span>}
-                          {t.dueDate && <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", overdue ? "bg-red-50 text-red-500" : "bg-gray-100 text-text-muted")}>{t.dueDate}{overdue ? ' 지남' : ''}</span>}
-                        </div>
-                        <div className="flex gap-1.5 mt-3">
-                          {TODO_STATUSES.filter(s => s.id !== t.status).map(s => (
-                            <button
-                              key={s.id}
-                              onClick={() => moveTodo(t.id, s.id)}
-                              className="flex-1 h-7 rounded-lg text-[10px] font-bold bg-surface border border-border-color text-text-muted hover:border-accent-color hover:text-accent-color transition-all"
-                            >
-                              → {s.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          {/* 보드/목록 전환 */}
+          <div className="flex justify-end">
+            <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit shadow-sm">
+              <button onClick={() => setBoardView('kanban')} className={cn("px-3 py-1 rounded-full text-[11px] font-bold transition-all", boardView === 'kanban' ? "bg-accent-color text-on-accent" : "text-text-muted")}>칸반 보드</button>
+              <button onClick={() => setBoardView('list')} className={cn("px-3 py-1 rounded-full text-[11px] font-bold transition-all", boardView === 'list' ? "bg-accent-color text-on-accent" : "text-text-muted")}>목록</button>
+            </div>
           </div>
+
+          {boardView === 'kanban' ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {TODO_STATUSES.map((col) => (
+                <div key={col.id} className="bg-surface rounded-2xl border border-border-color p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-bold text-text-main uppercase flex items-center gap-2">
+                      <span className={cn("w-2 h-2 rounded-full", col.id === 'todo' ? "bg-gray-400" : col.id === 'doing' ? "bg-amber-500" : "bg-green-500")} />
+                      {col.label}
+                    </h3>
+                    <span className="text-[10px] font-bold text-text-muted bg-bg-primary px-2 py-0.5 rounded-full">{columns[col.id].length}</span>
+                  </div>
+                  <div className="space-y-2 min-h-[80px]">
+                    {columns[col.id].length === 0 && (
+                      <p className="text-[11px] text-text-muted italic text-center py-6">항목이 없습니다</p>
+                    )}
+                    {columns[col.id].map(t => <TodoRow key={t.id} t={t} />)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {todosByCategory.length === 0 && (
+                <div className="p-10 text-center text-text-muted text-sm bg-surface rounded-2xl border border-border-color">등록된 할 일이 없습니다.</div>
+              )}
+              {todosByCategory.map(({ cat, items }) => (
+                <div key={cat.id}>
+                  <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2 mb-2">
+                    <span className={cn("w-2 h-2 rounded-full", cat.dot)} />{cat.label}
+                    <span className="text-[10px] font-bold text-text-muted bg-surface border border-border-color px-2 py-0.5 rounded-full">{items.length}</span>
+                  </h4>
+                  <div className="space-y-2">
+                    {items.map(t => <TodoRow key={t.id} t={t} compact />)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      ) : (
+      )}
+
+      {subTab === 'calendar' && (
+        <div className="space-y-4">
+          <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4 sm:p-6">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <button onClick={() => setCalBaseDate(subMonths(calBaseDate, 1))} className="p-2 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronLeft size={16} /></button>
+              <h3 className="font-serif text-xl font-bold text-text-main min-w-[140px] text-center">{format(calBaseDate, 'yyyy년 M월')}</h3>
+              <button onClick={() => setCalBaseDate(addMonths(calBaseDate, 1))} className="p-2 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronRight size={16} /></button>
+              <button onClick={() => setCalBaseDate(startOfToday())} className="px-3 py-1.5 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors">오늘</button>
+            </div>
+            <div className="grid grid-cols-7 rounded-xl overflow-hidden border border-border-color">
+              {['월', '화', '수', '목', '금', '토', '일'].map(d => (
+                <div key={d} className="text-center text-[10px] font-bold text-text-muted uppercase py-2 bg-bg-primary border-b border-border-color">{d}</div>
+              ))}
+              {calDays.map((d, idx) => {
+                const dateStr = format(d, 'yyyy-MM-dd');
+                const items = todosByDate[dateStr] || [];
+                const isCurMonth = isSameMonth(d, calBaseDate);
+                const isToday = isSameDay(d, startOfToday());
+                const cats: string[] = Array.from(new Set<string>(items.map((t: Todo) => t.category || 'etc'))).slice(0, 4);
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setCalSelectedDate(dateStr)}
+                    className={cn(
+                      "min-h-[72px] p-1.5 border-b border-r border-border-color cursor-pointer transition-colors",
+                      !isCurMonth ? "bg-gray-50/30" : "bg-surface hover:bg-gray-50/50",
+                      calSelectedDate === dateStr && "ring-2 ring-inset ring-accent-color"
+                    )}
+                  >
+                    <span className={cn("text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center", isToday ? "bg-accent-color text-on-accent" : !isCurMonth ? "text-gray-300" : "text-text-main")}>{format(d, 'd')}</span>
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {cats.map(cid => <span key={cid} className={cn("w-1.5 h-1.5 rounded-full", todoCategoryOf(cid).dot)} />)}
+                      {items.length > 0 && <span className="text-[9px] font-bold text-text-muted">{items.length}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {calSelectedDate && (
+            <div className="bg-surface rounded-2xl border border-amber-200 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-text-main">{calSelectedDate} 마감 할 일</h3>
+                <button onClick={() => setCalSelectedDate(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted transition-colors"><X size={16} /></button>
+              </div>
+              {(todosByDate[calSelectedDate] || []).length === 0 ? (
+                <p className="text-xs text-text-muted italic py-2">이 날짜에 마감인 할 일이 없습니다.</p>
+              ) : (
+                <div className="space-y-2">
+                  {(todosByDate[calSelectedDate] || []).map(t => <TodoRow key={t.id} t={t} compact />)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {subTab === 'notes' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 bg-surface rounded-2xl border border-border-color p-5 shadow-sm h-fit space-y-3">
             <h3 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Plus size={14} /> 새 메모 작성</h3>
             <input type="text" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} placeholder="제목" className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
-            <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="인수인계할 내용을 적어주세요" rows={6} className="w-full p-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color resize-none" />
+            <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="업무 관련 내용을 적어주세요" rows={6} className="w-full p-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color resize-none" />
             <button onClick={addNote} className="w-full h-10 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all">메모 남기기</button>
           </div>
           <div className="lg:col-span-2 space-y-3">
