@@ -181,6 +181,8 @@ export default function App() {
   const [schedulesLoaded, setSchedulesLoaded] = useState(false); // 서버에서 수업 목록을 실제로 받아왔는지
   const gnRooms = useMemo(() => mergeRooms(gnCustomRooms), [gnCustomRooms]);
   const gnByDate = useMemo(() => entriesByDate(gnEntries), [gnEntries]);
+  const [gnDetailDate, setGnDetailDate] = useState<string | null>(null); // 하단에 현황을 펼쳐서 보여줄 날짜
+  const [gnEntryTeachers, setGnEntryTeachers] = useState<Record<string, string>>({}); // 방문예약 id -> 담당 교사 id
 
   // --- 화면 테마 (라이트/다크). 처음 값은 index.html 의 스크립트가 미리 적용해 둡니다. ---
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
@@ -371,6 +373,30 @@ export default function App() {
       setNotifs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as SystemNotification));
     });
   }, []);
+
+  // 방문예약 담당 교사 매핑 구독 (우리 쪽 Firebase에 저장 — 강릉 앱 데이터는 건드리지 않습니다)
+  useEffect(() => {
+    if (!user) return;
+    return onSnapshot(collection(db, 'gnEntryTeachers'), (snapshot) => {
+      const map: Record<string, string> = {};
+      snapshot.forEach(d => { const v = d.data().teacherId; if (v) map[d.id] = v; });
+      setGnEntryTeachers(map);
+    }, err => console.warn('gnEntryTeachers snapshot error', err));
+  }, [user?.uid]);
+
+  // 방문예약에 담당 교사를 지정/해제합니다.
+  const assignGnEntryTeacher = async (entryId: string, teacherId: string) => {
+    try {
+      if (!teacherId) {
+        await deleteDoc(doc(db, 'gnEntryTeachers', entryId));
+      } else {
+        await setDoc(doc(db, 'gnEntryTeachers', entryId), { teacherId, updatedAt: serverTimestamp() });
+      }
+    } catch (e) {
+      console.warn('gnEntryTeachers write failed', e);
+      showNotify('담당 교사 저장에 실패했습니다.');
+    }
+  };
 
   // Fetch Teachers
   useEffect(() => {
@@ -1232,7 +1258,7 @@ export default function App() {
                               </button>
                             )}
                             {daySchedules.map(s => (<motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} key={s.id} onClick={() => handleEdit(s)} className="p-2 rounded-xl border border-border-color bg-bg-primary hover:border-accent-color hover:shadow-md transition-all cursor-pointer group relative"><div className="text-[9px] font-bold text-accent-color mb-0.5">{s.startTime}</div><h4 className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate">{s.program}</h4><div className="text-[9px] text-text-muted truncate opacity-80">{s.location}</div>{viewMode !== 'teacher' && <div className="text-[8px] font-bold text-gray-400 mt-1">{s.teacherName}</div>}</motion.div>))}
-                            {showGnEntries && viewMode === 'calendar' && (gnByDate.get(dateStr) || []).map(e => <GnEntryChip key={'gn-' + e.id} entry={e} rooms={gnRooms} />)}
+                            {showGnEntries && viewMode === 'calendar' && (gnByDate.get(dateStr) || []).map(e => <GnEntryChip key={'gn-' + e.id} entry={e} rooms={gnRooms} onClick={() => { setGnDetailDate(dateStr); setTimeout(() => document.getElementById('gn-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />)}
                           </div>
                         );
                       })}
@@ -1302,8 +1328,13 @@ export default function App() {
                                 )}
                                 {showGnEntries && viewMode === 'calendar' && (gnByDate.get(dateStr) || []).length > 0 && (
                                   <div
-                                    title={(gnByDate.get(dateStr) || []).map(e => `${e.session === 'AM' ? '오전' : '오후'} ${roomLabel(gnRooms, e.room)} · ${e.org} ${e.count}명`).join('\n')}
-                                    className="px-1.5 py-1 bg-amber-50 text-amber-700 text-[9px] font-bold rounded border border-amber-200 truncate"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setGnDetailDate(dateStr);
+                                      setTimeout(() => document.getElementById('gn-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                                    }}
+                                    title={(gnByDate.get(dateStr) || []).map(e => `${e.session === 'AM' ? '오전' : '오후'} ${roomLabel(gnRooms, e.room)} · ${e.org} ${e.count}명`).join('\n') + '\n\n클릭하면 아래에서 자세히 볼 수 있습니다'}
+                                    className="px-1.5 py-1 bg-amber-50 text-amber-700 text-[9px] font-bold rounded border border-amber-200 truncate cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-all"
                                   >
                                     🔗 방문예약 {(gnByDate.get(dateStr) || []).length}건
                                   </div>
@@ -1742,6 +1773,51 @@ export default function App() {
                     </motion.div>
                   </>
                 )}
+                {gnDetailDate && (
+                  <motion.div
+                    id="gn-detail-panel"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-surface rounded-2xl border border-amber-200 p-6 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-bold text-text-main uppercase flex items-center gap-2">
+                        <Link2 size={14} className="text-amber-600" />
+                        방문예약 현황 · {safeFormat(parseISO(gnDetailDate), 'M월 d일 (EEE)', { locale: ko })}
+                      </h3>
+                      <button onClick={() => setGnDetailDate(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted transition-colors"><X size={16} /></button>
+                    </div>
+                    {(gnByDate.get(gnDetailDate) || []).length === 0 ? (
+                      <p className="text-xs text-text-muted italic py-2">이 날짜에 등록된 방문예약이 없습니다.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {(gnByDate.get(gnDetailDate) || []).map(entry => (
+                          <div key={entry.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-amber-50/50 rounded-xl border border-amber-100">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{entry.session === 'AM' ? '오전' : '오후'}</span>
+                                <span className="text-sm font-bold text-text-main">{roomLabel(gnRooms, entry.room)}</span>
+                              </div>
+                              <div className="text-xs text-text-muted mt-1 flex items-center gap-1.5"><Users size={12} className="opacity-60" />{entry.org} · {entry.count}명{entry.note ? ` · ${entry.note}` : ''}</div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <UserIcon size={13} className="text-text-muted" />
+                              <select
+                                value={gnEntryTeachers[entry.id] || ''}
+                                onChange={(e) => assignGnEntryTeacher(entry.id, e.target.value)}
+                                className="h-8 px-2 bg-surface border border-border-color rounded-lg text-xs font-medium outline-none focus:border-accent-color transition-all"
+                              >
+                                <option value="">담당 교사 미지정</option>
+                                {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-text-muted mt-4 leading-relaxed">방문예약 정보는 강릉 방문예약 앱에서 관리합니다. 여기서는 읽기 전용으로 표시되며, 담당 교사 지정만 이 화면에 저장됩니다.</p>
+                  </motion.div>
+                )}
                 <div id="system-notifications" className="bg-surface rounded-2xl border-l-4 border-l-yellow-400 border border-border-color p-5 shadow-sm transition-all duration-500">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Bell size={14} className="text-yellow-500" />시스템 알림</h4>
@@ -1863,11 +1939,12 @@ function GnLinkedTags({ schedule, entries, rooms }: { schedule: Schedule; entrie
 }
 
 // 주간 달력에 표시되는 강릉 방문예약 카드 (읽기 전용)
-function GnEntryChip({ entry, rooms }: { entry: GnEntry; rooms: GnRoom[] }) {
+function GnEntryChip({ entry, rooms, onClick }: { entry: GnEntry; rooms: GnRoom[]; onClick?: () => void }) {
   return (
     <div
-      className="p-2 rounded-xl border border-amber-200 bg-amber-50/70"
-      title={`강릉 방문예약 · ${roomLabel(rooms, entry.room)} · ${entry.org} ${entry.count}명${entry.note ? ` (${entry.note})` : ''}`}
+      onClick={onClick}
+      className={cn("p-2 rounded-xl border border-amber-200 bg-amber-50/70", onClick && "cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-all")}
+      title={`강릉 방문예약 · ${roomLabel(rooms, entry.room)} · ${entry.org} ${entry.count}명${entry.note ? ` (${entry.note})` : ''}${onClick ? '\n\n클릭하면 아래에서 자세히 볼 수 있습니다' : ''}`}
     >
       <div className="text-[9px] font-bold text-amber-700 mb-0.5">{entry.session === 'AM' ? '오전' : '오후'} · 방문예약</div>
       <h4 className="text-[11px] font-bold text-text-main leading-tight mb-1 truncate">{entry.org} {entry.count}명</h4>
