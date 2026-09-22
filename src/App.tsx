@@ -25,7 +25,8 @@ import {
   Moon,
   ListChecks,
   GripVertical,
-  ClipboardList
+  ClipboardList,
+  Printer
 } from 'lucide-react';
 import { 
   collection, 
@@ -2026,7 +2027,7 @@ export default function App() {
             </div>
           </div>
         </div>)}
-          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} koreanHolidays={koreanHolidays} weatherDaily={weatherDaily} />}
+          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} koreanHolidays={koreanHolidays} weatherDaily={weatherDaily} schedules={schedules} />}
       </div>
 
         {/* Mobile Bottom Navigation Bar */}
@@ -2085,6 +2086,9 @@ interface Todo {
   assigneeName?: string;
   dueDate?: string;
   note?: string;
+  seriesId?: string;
+  linkedScheduleId?: string;
+  linkedScheduleLabel?: string;
   createdAt: any;
 }
 interface HandoffNote {
@@ -2110,7 +2114,7 @@ const TODO_CATEGORIES: { id: string; label: string; dot: string; bg: string; tex
 ];
 const todoCategoryOf = (id?: string) => TODO_CATEGORIES.find(c => c.id === (id || 'etc')) || TODO_CATEGORIES[TODO_CATEGORIES.length - 1];
 
-function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { teachers: Teacher[]; authorName: string; koreanHolidays: Record<string, string>; weatherDaily: Record<string, { max: number; min: number; code: number }> }) {
+function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedules }: { teachers: Teacher[]; authorName: string; koreanHolidays: Record<string, string>; weatherDaily: Record<string, { max: number; min: number; code: number }>; schedules: Schedule[] }) {
   const [subTab, setSubTab] = useState<'board' | 'calendar' | 'notes'>('board');
   const [boardView, setBoardView] = useState<'kanban' | 'list'>('kanban');
 
@@ -2120,6 +2124,9 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { tea
   const [newDue, setNewDue] = useState('');
   const [newCategory, setNewCategory] = useState('etc');
   const [newTagsText, setNewTagsText] = useState('');
+  const [newRepeat, setNewRepeat] = useState<'none' | 'weekly' | 'monthly'>('none');
+  const [newRepeatEndDate, setNewRepeatEndDate] = useState('');
+  const [newLinkedScheduleId, setNewLinkedScheduleId] = useState('');
 
   useEffect(() => {
     const q = query(collection(db, 'todos'), orderBy('createdAt', 'desc'));
@@ -2128,22 +2135,50 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { tea
     }, (err) => console.warn('todos snapshot error', err));
   }, []);
 
+  // 마감일에 등록된 일정 목록 (일정-할 일 연동용)
+  const schedulesForNewDue = useMemo(() => {
+    if (!newDue) return [];
+    return schedules.filter(s => s.date === newDue).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, [schedules, newDue]);
+
   const addTodo = async () => {
     if (!newTitle.trim()) return;
     try {
       const assigneeName = teachers.find(t => t.id === newAssignee)?.name || '';
       const tags = newTagsText.split(',').map(t => t.trim()).filter(Boolean);
-      await addDoc(collection(db, 'todos'), {
+      const linkedSchedule = newLinkedScheduleId ? schedulesForNewDue.find(s => s.id === newLinkedScheduleId) : null;
+      const base = {
         title: newTitle.trim(),
-        status: 'todo',
+        status: 'todo' as const,
         category: newCategory,
         tags,
         assigneeId: newAssignee || null,
         assigneeName: assigneeName || null,
-        dueDate: newDue || null,
-        createdAt: Timestamp.now(),
-      });
+        linkedScheduleId: linkedSchedule ? linkedSchedule.id : null,
+        linkedScheduleLabel: linkedSchedule ? `${linkedSchedule.startTime} ${linkedSchedule.program}` : null,
+      };
+
+      if (newRepeat !== 'none' && newDue && newRepeatEndDate) {
+        const dates: string[] = [];
+        let cursor = parseISO(newDue);
+        const endDate = parseISO(newRepeatEndDate);
+        while (cursor <= endDate && dates.length < 60) {
+          dates.push(format(cursor, 'yyyy-MM-dd'));
+          cursor = newRepeat === 'weekly' ? addDays(cursor, 7) : addMonths(cursor, 1);
+        }
+        if (dates.length === 0) { return; }
+        const seriesId = 'todoseries_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const batch = writeBatch(db);
+        dates.forEach(d => {
+          const ref = doc(collection(db, 'todos'));
+          batch.set(ref, { ...base, dueDate: d, seriesId, createdAt: Timestamp.now() });
+        });
+        await batch.commit();
+      } else {
+        await addDoc(collection(db, 'todos'), { ...base, dueDate: newDue || null, createdAt: Timestamp.now() });
+      }
       setNewTitle(''); setNewAssignee(''); setNewDue(''); setNewCategory('etc'); setNewTagsText('');
+      setNewRepeat('none'); setNewRepeatEndDate(''); setNewLinkedScheduleId('');
     } catch (err) { console.error(err); }
   };
 
@@ -2194,6 +2229,58 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { tea
     return map;
   }, [todos]);
 
+  // 이번 달 진행률
+  const monthProgress = useMemo(() => {
+    const monthStr = format(calBaseDate, 'yyyy-MM');
+    const monthTodos = todos.filter((t: Todo) => t.dueDate && t.dueDate.startsWith(monthStr));
+    const done = monthTodos.filter((t: Todo) => t.status === 'done').length;
+    const doing = monthTodos.filter((t: Todo) => t.status === 'doing').length;
+    const pct = monthTodos.length ? Math.round((done / monthTodos.length) * 100) : 0;
+    return { total: monthTodos.length, done, doing, pct };
+  }, [todos, calBaseDate]);
+
+  // 이번 주 할 일 인쇄/내보내기
+  const printWeeklyExport = () => {
+    const weekStart = startOfWeek(startOfToday(), { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(startOfToday(), { weekStartsOn: 1 });
+    const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const rows = weekDays.map(d => {
+      const dateStr = format(d, 'yyyy-MM-dd');
+      const items = (todosByDate[dateStr] || []).slice().sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0));
+      return { label: format(d, 'M/d (EEE)', { locale: ko }), holiday: koreanHolidays[dateStr], items };
+    });
+    const win = window.open('', '_blank', 'width=800,height=1000');
+    if (!win) { alert('팝업이 차단되어 있습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도해주세요.'); return; }
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>이번 주 할 일 (${esc(format(weekStart, 'yyyy-MM-dd'))} ~ ${esc(format(weekEnd, 'yyyy-MM-dd'))})</title>
+    <style>
+      body{font-family:-apple-system,'Malgun Gothic','Apple SD Gothic Neo',sans-serif;padding:32px;color:#1a1a1a;}
+      h1{font-size:20px;margin:0 0 4px;}
+      p.sub{color:#777;font-size:12px;margin:0 0 24px;}
+      .day{margin-bottom:18px;page-break-inside:avoid;}
+      .day h2{font-size:13px;border-bottom:2px solid #333;padding-bottom:5px;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+      .day h2 .holiday{color:#c0392b;font-weight:bold;font-size:11px;}
+      ul{list-style:none;padding:0;margin:0;}
+      li{padding:6px 2px;border-bottom:1px solid #eee;font-size:13px;display:flex;align-items:center;gap:8px;}
+      li.done{color:#aaa;text-decoration:line-through;}
+      .tag{font-size:10px;font-weight:bold;padding:2px 8px;border-radius:999px;background:#eee;color:#555;white-space:nowrap;}
+      .empty{color:#bbb;font-size:12px;font-style:italic;padding:4px 2px;}
+      @media print{ body{padding:12px;} }
+    </style></head><body>
+      <h1>이번 주 할 일</h1>
+      <p class="sub">${esc(format(weekStart, 'yyyy년 M월 d일'))} ~ ${esc(format(weekEnd, 'M월 d일'))} · 출력일 ${esc(format(startOfToday(), 'yyyy-MM-dd'))}</p>
+      ${rows.map(r => `
+        <div class="day">
+          <h2>${esc(r.label)}${r.holiday ? ` <span class="holiday">${esc(r.holiday)}</span>` : ''}</h2>
+          ${r.items.length === 0 ? '<p class="empty">등록된 할 일이 없습니다.</p>' : `<ul>${r.items.map(t => `<li class="${t.status === 'done' ? 'done' : ''}">${t.status === 'done' ? '✅' : '⬜'} <b>${esc(t.title)}</b> <span class="tag">${esc(todoCategoryOf(t.category).label)}</span>${t.assigneeName ? ` <span class="tag">${esc(t.assigneeName)}</span>` : ''}${t.linkedScheduleLabel ? ` <span class="tag">🔗 ${esc(t.linkedScheduleLabel)}</span>` : ''}</li>`).join('')}</ul>`}
+        </div>`).join('')}
+    </body></html>`;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  };
+
   const [notes, setNotes] = useState<HandoffNote[]>([]);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteContent, setNoteContent] = useState('');
@@ -2236,7 +2323,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { tea
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className={cn("text-sm font-semibold text-text-main flex-1", t.status === 'done' && "line-through opacity-50")}>{t.title}</p>
+            <p className={cn("text-sm font-semibold text-text-main flex-1", t.status === 'done' && "line-through opacity-50")}>{t.title}{t.seriesId && <span className="ml-1 text-xs" title="반복 업무">🔁</span>}</p>
             <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><X size={14} /></button>
           </div>
           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -2246,6 +2333,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { tea
             ))}
             {t.assigneeName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-accent-color">{t.assigneeName}</span>}
             {t.dueDate && <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", overdue ? "bg-red-50 text-red-500" : "bg-gray-100 text-text-muted")}>{t.dueDate}{overdue ? ' 지남' : ''}</span>}
+            {t.linkedScheduleLabel && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 flex items-center gap-1" title="연결된 일정"><Link2 size={10} />{t.linkedScheduleLabel}</span>}
           </div>
           {!compact && (
             <div className="flex gap-1.5 mt-3">
@@ -2318,6 +2406,34 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { tea
                 <Plus size={16} /> 추가
               </button>
             </div>
+            <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-border-color/60 mt-1">
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-[11px] font-bold text-text-muted shrink-0">반복</span>
+                <select value={newRepeat} onChange={(e) => setNewRepeat(e.target.value as 'none' | 'weekly' | 'monthly')} disabled={!newDue} className="h-9 px-2 flex-1 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color disabled:opacity-50" title={!newDue ? '먼저 마감일을 선택하세요' : ''}>
+                  <option value="none">안 함</option>
+                  <option value="weekly">매주 반복</option>
+                  <option value="monthly">매월 반복</option>
+                </select>
+                {newRepeat !== 'none' && (
+                  <input type="date" value={newRepeatEndDate} min={newDue} onChange={(e) => setNewRepeatEndDate(e.target.value)} className="h-9 px-2 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color" title="반복 종료일" />
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-[11px] font-bold text-text-muted shrink-0 flex items-center gap-1"><Link2 size={12} />연결</span>
+                <select
+                  value={newLinkedScheduleId}
+                  onChange={(e) => setNewLinkedScheduleId(e.target.value)}
+                  disabled={!newDue || schedulesForNewDue.length === 0}
+                  className="h-9 px-2 flex-1 bg-bg-primary border border-border-color rounded-lg text-xs outline-none focus:border-accent-color disabled:opacity-50"
+                  title={!newDue ? '먼저 마감일을 선택하세요' : schedulesForNewDue.length === 0 ? '해당 날짜에 등록된 일정이 없습니다' : ''}
+                >
+                  <option value="">
+                    {!newDue ? '마감일을 먼저 선택하세요' : schedulesForNewDue.length === 0 ? '해당 날짜 일정 없음' : '연결할 일정 선택 (선택)'}
+                  </option>
+                  {schedulesForNewDue.map(s => <option key={s.id} value={s.id}>{s.startTime} {s.program}</option>)}
+                </select>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end">
@@ -2371,6 +2487,20 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily }: { tea
       {subTab === 'calendar' && (
         <div className="space-y-4">
           <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4 sm:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between text-xs font-bold text-text-muted mb-1.5">
+                  <span>{format(calBaseDate, 'M월')} 할 일 진행률</span>
+                  <span className="text-text-main">{monthProgress.done}/{monthProgress.total}건 완료 ({monthProgress.pct}%)</span>
+                </div>
+                <div className="w-full h-2 bg-bg-primary rounded-full overflow-hidden">
+                  <div className="h-full bg-accent-color rounded-full transition-all" style={{ width: `${monthProgress.pct}%` }} />
+                </div>
+              </div>
+              <button onClick={printWeeklyExport} className="h-9 px-4 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 shrink-0 justify-center">
+                <Printer size={14} /> 이번 주 인쇄/내보내기
+              </button>
+            </div>
             <div className="flex items-center justify-center gap-3 mb-6">
               <button onClick={() => setCalBaseDate(subMonths(calBaseDate, 1))} className="p-2.5 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronLeft size={18} /></button>
               <h3 className="font-serif text-2xl font-bold text-text-main min-w-[160px] text-center">{format(calBaseDate, 'yyyy년 M월')}</h3>
