@@ -2163,7 +2163,7 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="w-full">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div>
           <h2 className="font-serif text-2xl font-bold text-text-main">업무 관리</h2>
@@ -2266,16 +2266,16 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
 
       {subTab === 'calendar' && (
         <div className="space-y-4">
-          <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4 sm:p-6">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <button onClick={() => setCalBaseDate(subMonths(calBaseDate, 1))} className="p-2 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronLeft size={16} /></button>
-              <h3 className="font-serif text-xl font-bold text-text-main min-w-[140px] text-center">{format(calBaseDate, 'yyyy년 M월')}</h3>
-              <button onClick={() => setCalBaseDate(addMonths(calBaseDate, 1))} className="p-2 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronRight size={16} /></button>
-              <button onClick={() => setCalBaseDate(startOfToday())} className="px-3 py-1.5 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors">오늘</button>
+          <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4 sm:p-8">
+            <div className="flex items-center justify-center gap-3 mb-6">
+              <button onClick={() => setCalBaseDate(subMonths(calBaseDate, 1))} className="p-2.5 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronLeft size={18} /></button>
+              <h3 className="font-serif text-2xl font-bold text-text-main min-w-[160px] text-center">{format(calBaseDate, 'yyyy년 M월')}</h3>
+              <button onClick={() => setCalBaseDate(addMonths(calBaseDate, 1))} className="p-2.5 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronRight size={18} /></button>
+              <button onClick={() => setCalBaseDate(startOfToday())} className="px-4 py-2 bg-bg-primary border border-border-color rounded-full text-sm font-bold hover:bg-gray-50 transition-colors">오늘</button>
             </div>
             <div className="grid grid-cols-7 rounded-xl overflow-hidden border border-border-color">
               {['월', '화', '수', '목', '금', '토', '일'].map(d => (
-                <div key={d} className="text-center text-[10px] font-bold text-text-muted uppercase py-2 bg-bg-primary border-b border-border-color">{d}</div>
+                <div key={d} className="text-center text-xs font-bold text-text-muted uppercase py-3 bg-bg-primary border-b border-border-color">{d}</div>
               ))}
               {calDays.map((d, idx) => {
                 const dateStr = format(d, 'yyyy-MM-dd');
@@ -2288,15 +2288,15 @@ function TasksView({ teachers, authorName }: { teachers: Teacher[]; authorName: 
                     key={idx}
                     onClick={() => setCalSelectedDate(dateStr)}
                     className={cn(
-                      "min-h-[72px] p-1.5 border-b border-r border-border-color cursor-pointer transition-colors",
+                      "min-h-[128px] p-2.5 border-b border-r border-border-color cursor-pointer transition-colors",
                       !isCurMonth ? "bg-gray-50/30" : "bg-surface hover:bg-gray-50/50",
                       calSelectedDate === dateStr && "ring-2 ring-inset ring-accent-color"
                     )}
                   >
-                    <span className={cn("text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center", isToday ? "bg-accent-color text-on-accent" : !isCurMonth ? "text-gray-300" : "text-text-main")}>{format(d, 'd')}</span>
-                    <div className="flex gap-1 mt-1 flex-wrap">
-                      {cats.map(cid => <span key={cid} className={cn("w-1.5 h-1.5 rounded-full", todoCategoryOf(cid).dot)} />)}
-                      {items.length > 0 && <span className="text-[9px] font-bold text-text-muted">{items.length}</span>}
+                    <span className={cn("text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center", isToday ? "bg-accent-color text-on-accent" : !isCurMonth ? "text-gray-300" : "text-text-main")}>{format(d, 'd')}</span>
+                    <div className="flex gap-1.5 mt-2 flex-wrap items-center">
+                      {cats.map(cid => <span key={cid} className={cn("w-2 h-2 rounded-full", todoCategoryOf(cid).dot)} />)}
+                      {items.length > 0 && <span className="text-[11px] font-bold text-text-muted">{items.length}</span>}
                     </div>
                   </div>
                 );
