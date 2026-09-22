@@ -102,8 +102,9 @@ import {
 } from './lib/gangneungLink';
 import type { GnEntry, GnRoom } from './lib/gangneungLink';
 
-// --- 한국 주요 국경일 및 공휴일 데이터 ---
+// --- 한국 주요 국경일 및 공휴일 데이터 (양력 & 연도별 명절 지원) ---
 const KOREAN_HOLIDAYS: Record<string, string> = {
+  // 매년 고정 양력 국경일/공휴일
   '01-01': '신정',
   '03-01': '삼일절',
   '05-05': '어린이날',
@@ -112,19 +113,25 @@ const KOREAN_HOLIDAYS: Record<string, string> = {
   '10-03': '개천절',
   '10-09': '한글날',
   '12-25': '성탄절',
+  
+  // 2026년 명절 및 대체공휴일
   '2026-02-16': '설날 연휴',
   '2026-02-17': '설날',
   '2026-02-18': '설날 연휴',
+  '2026-05-24': '부처님오신날',
+  '2026-05-25': '대체공휴일',
   '2026-09-24': '추석 연휴',
   '2026-09-25': '추석',
   '2026-09-26': '추석 연휴',
 };
 
 const getHolidayName = (dateStr: string) => {
-  const monthDay = dateStr.slice(5);
+  if (!dateStr) return null;
+  const monthDay = dateStr.slice(5); // MM-DD
   return KOREAN_HOLIDAYS[dateStr] || KOREAN_HOLIDAYS[monthDay] || null;
 };
 
+// --- Types ---
 interface Schedule {
   id: string;
   day: string;
@@ -195,11 +202,31 @@ export default function App() {
   const [baseDate, setBaseDate] = useState(startOfToday());
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0); 
 
-  const [weather, setWeather] = useState<{ temp: number; text: string; icon: string } | null>({
-    temp: 22,
-    text: '맑음',
-    icon: 'sun'
-  });
+  // --- 실시간 날씨 불러오기 (Open-Meteo 무료 API 연동 - 강릉 기준) ---
+  const [weather, setWeather] = useState<{ temp: number; text: string } | null>(null);
+
+  useEffect(() => {
+    // 강릉 위도/경도 (37.7519, 128.8761) 날씨 조회
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=37.7519&longitude=128.8761&current_weather=true')
+      .then(res => res.json())
+      .then(data => {
+        if (data.current_weather) {
+          const code = data.current_weather.weathercode;
+          let text = '맑음';
+          if (code >= 1 && code <= 3) text = '구름조금';
+          else if (code >= 45 && code <= 48) text = '안개';
+          else if (code >= 51 && code <= 67) text = '비';
+          else if (code >= 71 && code <= 77) text = '눈';
+          else if (code >= 80) text = '소나기';
+
+          setWeather({
+            temp: Math.round(data.current_weather.temperature),
+            text: text
+          });
+        }
+      })
+      .catch(err => console.error("Weather fetch error:", err));
+  }, []);
 
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
@@ -220,8 +247,6 @@ export default function App() {
   const [schedulesLoaded, setSchedulesLoaded] = useState(false);
   const gnRooms = useMemo(() => mergeRooms(gnCustomRooms), [gnCustomRooms]);
   const gnByDate = useMemo(() => entriesByDate(gnEntries), [gnEntries]);
-  const [gnDetailDate, setGnDetailDate] = useState<string | null>(null);
-  const [gnEntryTeachers, setGnEntryTeachers] = useState<Record<string, string>>({});
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
@@ -240,7 +265,6 @@ export default function App() {
     '원주분원': ''
   });
 
-  const [registeredUsers, setRegisteredUsers] = useState<{id: string, role: string}[]>([]);
   const [formData, setFormData] = useState({
     day: '월',
     date: format(startOfToday(), 'yyyy-MM-dd'),
@@ -315,7 +339,7 @@ export default function App() {
     });
   }, [schedules, searchTerm, selectedDay]);
 
-  // ✅ 강릉분원 이미지 경로 수정 (logo-gangneung.jpg 적용)
+  // 디오라마 카드 목록
   const DIORAMA_ITEMS = [
     { name: '강릉분원', src: './logo-gangneung.jpg', url: 'https://www.gninjae.or.kr' },
     { name: '춘천본원', src: './logo-chuncheon.jpg', url: 'https://jinro.gwe.go.kr' },
@@ -335,7 +359,7 @@ export default function App() {
           <h1 className="font-serif text-sm font-bold text-accent-color truncate">{appName}</h1>
         </div>
         
-        {/* 디오라마 카드 영역 */}
+        {/* 디오라마 카드 */}
         <div className="space-y-3 mt-auto pt-6">
           {DIORAMA_ITEMS.map(diorama => (
             <div 
@@ -363,17 +387,17 @@ export default function App() {
             </div>
           </div>
 
-          {/* 실시간 날씨 위젯 */}
+          {/* 실시간 날씨 표시 */}
           {weather && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-bg-primary border border-border-color rounded-full text-xs font-bold text-text-main shadow-sm">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-50/80 border border-blue-200 rounded-full text-xs font-bold text-blue-900 shadow-sm">
               <Sun className="text-amber-500 animate-spin-slow" size={16} />
               <span>강릉 {weather.temp}°C</span>
-              <span className="text-text-muted">({weather.text})</span>
+              <span className="text-blue-600 font-medium">({weather.text})</span>
             </div>
           )}
         </header>
 
-        {/* Calendar Viewport */}
+        {/* 달력 뷰포트 */}
         <div className="flex-1 overflow-y-auto p-6 bg-bg-primary">
           <div className="bg-surface rounded-2xl border border-border-color shadow-sm overflow-hidden">
             <div className="grid grid-cols-7 border-b border-border-color bg-soft">
@@ -391,17 +415,18 @@ export default function App() {
                 const isCurMonth = safeIsSameMonth(dayDate, baseDate);
 
                 return (
-                  <div key={dateStr || idx} className="min-h-[120px] p-2 flex flex-col bg-surface hover:bg-gray-50/10">
+                  <div key={dateStr || idx} className={cn("min-h-[120px] p-2 flex flex-col hover:bg-gray-50/10", !isCurMonth && "opacity-40 bg-gray-50/30")}>
                     <div className="flex justify-between items-start mb-1">
                       <span className={cn(
                         "text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center",
-                        isToday ? "bg-accent-color text-on-accent" : holidayName || dayDate.getDay() === 0 ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-muted"
+                        isToday ? "bg-accent-color text-on-accent shadow-sm" : holidayName || dayDate.getDay() === 0 ? "text-sun" : dayDate.getDay() === 6 ? "text-sat" : "text-text-muted"
                       )}>
                         {safeFormat(dayDate, 'd')}
                       </span>
                       
+                      {/* 국경일 / 공휴일 표시 */}
                       {holidayName && (
-                        <span className="text-[9px] font-black text-red-500 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-100 truncate">
+                        <span className="text-[9px] font-black text-red-500 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-100 truncate shadow-xs">
                           {holidayName}
                         </span>
                       )}
@@ -409,7 +434,7 @@ export default function App() {
 
                     <div className="flex-1 space-y-1">
                       {daySchedules.map(s => (
-                        <div key={s.id} className="px-1.5 py-1 text-[9px] font-bold rounded bg-blue-50 text-blue-700 truncate">
+                        <div key={s.id} className="px-1.5 py-1 text-[9px] font-bold rounded bg-blue-50 text-blue-700 truncate border border-blue-100">
                           {s.startTime} {s.program}
                         </div>
                       ))}
