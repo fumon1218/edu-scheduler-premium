@@ -1,9 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#344B68" />
     <title>Edu-Scheduler Premium</title>
+    <script>
+      // 화면이 깜빡이지 않도록, 저장된(또는 기기 설정에 맞는) 라이트/다크 테마를 먼저 적용합니다.
+      (function () {
+        try {
+          var t = localStorage.getItem('eduThemeV1');
+          if (t !== 'dark' && t !== 'light') {
+            t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
     <script>
       window.onerror = function(msg, url, line, col, error) {
         var div = document.createElement('div');
