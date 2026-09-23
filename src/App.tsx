@@ -26,7 +26,10 @@ import {
   ListChecks,
   GripVertical,
   ClipboardList,
-  Printer
+  Printer,
+  Menu,
+  Plane,
+  StickyNote
 } from 'lucide-react';
 import { 
   collection, 
@@ -246,6 +249,7 @@ export default function App() {
   const [notificationMsg, setNotificationMsg] = useState('');
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // --- 강릉분원 방문예약 앱 연동 ---
   const [gnEntries, setGnEntries] = useState<GnEntry[]>([]);
@@ -1070,41 +1074,15 @@ export default function App() {
     { name: '원주분원', src: './logo-wonju.jpg', url: 'https://wj.gwe.go.kr' }
   ];
 
-  return (
-    <div className="flex h-screen bg-bg-primary overflow-hidden font-sans select-none">
-      {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 bg-surface/80 backdrop-blur-md border-b border-border-color z-40 px-4 h-14 flex items-center justify-between">
-        <div 
-          onClick={() => { setViewMode('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-          className="flex items-center gap-2 cursor-pointer min-w-0"
-        >
-          <img src={appLogo} alt="Logo" className="w-7 h-7 object-contain shrink-0" />
-          <span className="font-serif font-bold text-base tracking-tight text-accent-color whitespace-nowrap overflow-hidden text-ellipsis" title={appName}>{appName}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button onClick={toggleTheme} aria-label="라이트/다크 모드 전환" className="p-2 text-text-muted hover:text-accent-color transition-colors">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
-          <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="p-2 text-text-muted hover:text-accent-color transition-colors"><Link2 size={20} /></a>
-          <button onClick={scrollToNotifications} className="p-2 text-text-muted hover:text-accent-color transition-colors relative">
-            <Bell size={20} />
-            <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" />
-          </button>
-          <div 
-            onClick={() => setIsSettingsOpen(true)}
-            className="w-8 h-8 rounded-full border border-border-color overflow-hidden cursor-pointer ml-1"
-          >
-            {user?.photoURL ? (
-              <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-blue-50 flex items-center justify-center text-[10px] font-bold text-accent-color">
-                {user?.displayName?.slice(0, 1) || 'U'}
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+  // 설정 열기: 업무 관리 화면에서는 설정 창이 없으므로 리스트 화면으로 옮긴 뒤 엽니다.
+  const openSettings = () => {
+    if (viewMode === 'tasks') { setViewMode('list'); setIsSettingsOpen(true); }
+    else setIsSettingsOpen(v => !v);
+  };
 
-      {/* Sidebar (Desktop) */}
-      <aside className="hidden lg:flex w-64 bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
+  // PC 사이드바와 모바일 메뉴(서랍)에서 같이 쓰는 메뉴 내용
+  const renderSidebarContent = () => (
+    <>
         <div 
           onClick={() => { setViewMode('list'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           className="flex items-center gap-3 px-2 mb-10 cursor-pointer hover:opacity-80 transition-opacity"
@@ -1120,14 +1098,14 @@ export default function App() {
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
           <div onClick={() => setViewMode('tasks')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'tasks' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><ListChecks size={18} /><span>업무 관리</span></div>
-          <div onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
+          <div onClick={openSettings} className={cn("px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
           <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><Link2 size={18} /><span>강릉 방문예약</span><span className={cn("ml-auto w-2 h-2 rounded-full", gnStatus === 'ok' ? "bg-green-500" : gnStatus === 'error' ? "bg-red-500" : "bg-gray-300")} /></a>
           <a href={CHURCH_CALENDAR_URL} target="_blank" rel="noopener noreferrer" title="교회 캘린더 앱 열기 (새 창)" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><CalendarIcon size={18} /><span>교회 캘린더</span><ExternalLink size={13} className="ml-auto opacity-50" /></a>
           
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.7.5</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.8.0</p>
             </div>
             
             <div className="space-y-3">
@@ -1165,18 +1143,81 @@ export default function App() {
             <button onClick={() => {}} className="flex items-center gap-3 w-full px-4 py-2.5 text-accent-color hover:bg-blue-50 transition-colors text-sm font-bold"><LogIn size={18} /><span>로그인</span></button>
           )}
         </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-screen h-[100dvh] bg-bg-primary overflow-hidden font-sans select-none">
+
+      {/* Sidebar (Desktop) - 내용이 길면 사이드바 안에서 스크롤 */}
+      <aside className="hidden lg:flex w-64 h-full overflow-y-auto bg-sidebar-bg border-r border-border-color flex-col p-6 shrink-0">
+        {renderSidebarContent()}
       </aside>
+
+      {/* Sidebar (Mobile Drawer) - PC와 같은 메뉴를 햄버거 버튼으로 열기 */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="lg:hidden fixed inset-0 bg-black/30 backdrop-blur-sm z-[120]"
+            />
+            <motion.aside
+              initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
+              transition={{ type: 'tween', duration: 0.25 }}
+              onClick={(e) => { if ((e.target as HTMLElement).closest('a,button,.cursor-pointer')) setIsMobileMenuOpen(false); }}
+              className="lg:hidden fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] bg-sidebar-bg border-r border-border-color z-[130] flex flex-col px-6 overflow-y-auto overscroll-contain"
+              style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+            >
+              <button aria-label="메뉴 닫기" className="absolute top-3 right-3 p-2 text-text-muted hover:text-text-main" style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}><X size={20} /></button>
+              {renderSidebarContent()}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-[72px] bg-surface border-b border-border-color flex items-center justify-between px-8 shrink-0">
-          <div className="flex items-center gap-4 flex-1 max-w-md">
+        {/* Mobile Header */}
+        <header className="lg:hidden shrink-0 box-content bg-surface border-b border-border-color z-40 px-3 h-14 flex items-center justify-between gap-2" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <button onClick={() => setIsMobileMenuOpen(true)} aria-label="메뉴 열기" className="p-2 -ml-1 text-text-main hover:text-accent-color transition-colors shrink-0"><Menu size={22} /></button>
+          <div 
+            onClick={() => { setViewMode('list'); }}
+            className="flex items-center gap-2 cursor-pointer min-w-0 flex-1"
+          >
+            <img src={appLogo} alt="Logo" className="w-7 h-7 object-contain shrink-0" />
+            <span className="font-serif font-bold text-base tracking-tight text-accent-color whitespace-nowrap overflow-hidden text-ellipsis" title={appName}>{appName}</span>
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button onClick={toggleTheme} aria-label="라이트/다크 모드 전환" className="p-2 text-text-muted hover:text-accent-color transition-colors">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
+            <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="p-2 text-text-muted hover:text-accent-color transition-colors"><Link2 size={20} /></a>
+            <button onClick={scrollToNotifications} className="p-2 text-text-muted hover:text-accent-color transition-colors relative">
+              <Bell size={20} />
+              <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" />
+            </button>
+            <div 
+              onClick={() => { if (viewMode === 'tasks') setViewMode('list'); setIsSettingsOpen(true); }}
+              className="w-8 h-8 rounded-full border border-border-color overflow-hidden cursor-pointer ml-1"
+            >
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-blue-50 flex items-center justify-center text-[10px] font-bold text-accent-color">
+                  {user?.displayName?.slice(0, 1) || 'U'}
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+        <header className="h-14 lg:h-[72px] bg-surface border-b border-border-color flex items-center justify-between px-3 lg:px-8 shrink-0">
+          <div className="flex items-center gap-4 flex-1 lg:max-w-md">
             <div className="relative w-full">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted/50" size={16} />
               <input type="text" placeholder="프로그램, 장소, 대상 검색..." className="w-full h-10 pl-11 pr-4 bg-bg-primary border border-border-color rounded-full text-sm outline-none focus:border-accent-color transition-colors" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="hidden lg:flex items-center gap-4">
             <div className="relative w-10 h-10 bg-bg-primary rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"><Bell size={18} className="text-text-main" /><span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" /></div>
             <div className="flex items-center gap-3">
               {user && (
@@ -1220,11 +1261,11 @@ export default function App() {
                     )}
                   >
                     {viewMode === 'list' ? '스케줄 관리' : 
-                     viewMode === 'teacher' ? '교사 시간표' : 
+                     viewMode === 'teacher' ? `${safeFormat(baseDate, 'yyyy년 M월')} 교사 시간표` : 
                      `${safeFormat(baseDate, 'yyyy년 M월')} 일정표`}
                   </h2>
                   <p className="text-sm text-text-muted">
-                    {viewMode === 'teacher' ? '교사별 개인 시간표를 확인하세요' : '교육 프로그램 일정을 효율적으로 관리하세요'}
+                    {viewMode === 'teacher' ? `${teachers.find(t => t.id === selectedTeacherId)?.name ? teachers.find(t => t.id === selectedTeacherId)?.name + ' 선생님의 ' : '교사별 '}${safeFormat(baseDate, 'M월')} 시간표입니다 · 제목을 누르면 월을 바꿀 수 있어요` : '교육 프로그램 일정을 효율적으로 관리하세요'}
                   </p>
                   
                   <AnimatePresence>
@@ -1289,9 +1330,9 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-3 w-full overflow-x-auto no-scrollbar scroll-smooth pb-1">
+              <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-3 w-full lg:overflow-x-auto no-scrollbar scroll-smooth pb-1">
                 {viewMode === 'list' ? (
-                  <div className="flex-1 flex p-1 bg-surface border border-border-color rounded-full overflow-x-auto no-scrollbar scroll-smooth">
+                  <div className="w-full lg:w-auto lg:flex-1 flex p-1 bg-surface border border-border-color rounded-full overflow-x-auto no-scrollbar scroll-smooth">
                     <button onClick={() => { setSelectedDay(null); }} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap", !selectedDay ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>전체</button>
                     {DAYS.map(day => (<button key={day} onClick={() => { setSelectedDay(day); }} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap", selectedDay === day ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>{day}요일</button>))}
                   </div>
@@ -1385,8 +1426,8 @@ export default function App() {
                     </div>
                   </div>
                 ) : calendarView === 'week' ? (
-                  <div className="bg-surface rounded-2xl border border-border-color overflow-hidden shadow-sm">
-                    <div className="grid grid-cols-7 border-b border-border-color bg-soft">
+                  <div className="bg-surface rounded-2xl border border-border-color overflow-x-auto lg:overflow-hidden shadow-sm">
+                    <div className="grid grid-cols-7 min-w-[720px] lg:min-w-0 border-b border-border-color bg-soft">
                       {currentViewWeek.map((dayDate, idx) => {
                         const dateStr = safeFormat(dayDate, 'yyyy-MM-dd');
                         const holidayName = koreanHolidays[dateStr];
@@ -1402,7 +1443,7 @@ export default function App() {
                         );
                       })}
                     </div>
-                    <div className="grid grid-cols-7 min-h-[550px] divide-x divide-border-color">
+                    <div className="grid grid-cols-7 min-w-[720px] lg:min-w-0 min-h-[550px] divide-x divide-border-color">
                       {currentViewWeek.map((dayDate, idx) => {
                         const dateStr = safeFormat(dayDate, 'yyyy-MM-dd');
                         const daySchedules = filteredSchedules.filter(s => s.date === dateStr);
@@ -1435,14 +1476,14 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-surface rounded-2xl border border-border-color overflow-hidden shadow-sm min-h-[700px] flex flex-col">
-                    <div className="grid grid-cols-7 border-b border-border-color bg-soft">
+                  <div className="bg-surface rounded-2xl border border-border-color overflow-x-auto lg:overflow-hidden shadow-sm min-h-[700px] flex flex-col">
+                    <div className="grid grid-cols-7 min-w-[700px] lg:min-w-0 border-b border-border-color bg-soft">
                       {['월', '화', '수', '목', '금', '토', '일'].map(d => (
                         <div key={d} className={cn("py-3 text-center text-[10px] font-bold uppercase tracking-widest", d === '일' ? "text-sun" : d === '토' ? "text-sat" : "text-text-muted")}>{d}</div>
                       ))}
                     </div>
 
-                    <div className="grid grid-cols-7 flex-1 divide-x divide-y divide-border-color">
+                    <div className="grid grid-cols-7 min-w-[700px] lg:min-w-0 flex-1 divide-x divide-y divide-border-color">
                       {calendarDays.length > 0 ? (
                         calendarDays.map((dayDate, idx) => {
                           const dateStr = safeFormat(dayDate, 'yyyy-MM-dd');
@@ -2034,7 +2075,7 @@ export default function App() {
       </div>
 
         {/* Mobile Bottom Navigation Bar */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface/90 backdrop-blur-xl border-t border-border-color z-[100] px-6 py-2 pb-safe flex items-center justify-between shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface/90 backdrop-blur-xl border-t border-border-color z-[100] px-3 sm:px-6 py-2 pb-safe flex items-center justify-between shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
           <button onClick={() => { setViewMode('calendar'); setCalendarView('month'); }} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'calendar' && calendarView === 'month' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
             <CalendarDays size={20} strokeWidth={2.5} />
             <span className="text-[9px] font-black tracking-tighter">월간</span>
@@ -2066,13 +2107,13 @@ export default function App() {
             <Users size={20} strokeWidth={2.5} />
             <span className="text-[9px] font-black tracking-tighter">교사</span>
           </button>
-          <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={cn("flex flex-col items-center gap-1 transition-all flex-1", isSettingsOpen ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
+          <button onClick={openSettings} className={cn("flex flex-col items-center gap-1 transition-all flex-1", isSettingsOpen ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
             <Settings size={20} strokeWidth={2.5} />
             <span className="text-[9px] font-black tracking-tighter">설정</span>
           </button>
         </nav>
       </div>
-      <AnimatePresence>{showNotification && (<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-24 right-8 bg-text-main text-bg-primary px-6 py-4 rounded-2xl shadow-2xl z-[100] flex items-center gap-3 border border-gray-700"><Bell className="text-accent-color" size={18} /><span className="text-sm font-medium">{notificationMsg}</span></motion.div>)}</AnimatePresence>
+      <AnimatePresence>{showNotification && (<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-24 right-4 left-4 sm:left-auto sm:right-8 bg-text-main text-bg-primary px-6 py-4 rounded-2xl shadow-2xl z-[100] flex items-center gap-3 border border-gray-700"><Bell className="text-accent-color" size={18} /><span className="text-sm font-medium">{notificationMsg}</span></motion.div>)}</AnimatePresence>
     </div>
   );
 }
@@ -2101,6 +2142,40 @@ interface HandoffNote {
   authorName: string;
   createdAt: any;
 }
+
+// 날짜별 메모 (업무 관리 캘린더에서 날짜 칸을 두 번 눌러 작성)
+interface DayNote {
+  id: string;
+  date: string;
+  content: string;
+  authorName?: string;
+  updatedAt?: any;
+}
+// 출장 (시작일~종료일 동안 캘린더에 띠로 표시)
+interface Trip {
+  id: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  place?: string | null;
+  assigneeId?: string | null;
+  assigneeName?: string | null;
+  authorName?: string;
+  createdAt?: any;
+}
+const TRIP_COLORS = [
+  'bg-[#344B68] text-white',
+  'bg-[#3E7C74] text-white',
+  'bg-[#A5793A] text-white',
+  'bg-[#B24638] text-white',
+  'bg-[#6B5B95] text-white',
+];
+const tripColorOf = (t: Trip) => {
+  const key = t.assigneeId || t.id;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return TRIP_COLORS[h % TRIP_COLORS.length];
+};
 
 const TODO_STATUSES: { id: Todo['status']; label: string }[] = [
   { id: 'todo', label: '할 일' },
@@ -2231,6 +2306,147 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
     todos.forEach((t: Todo) => { if (t.dueDate) (map[t.dueDate] ||= []).push(t); });
     return map;
   }, [todos]);
+
+  // ---------- 날짜 메모 ----------
+  const [dayNotes, setDayNotes] = useState<Record<string, DayNote>>({});
+  const [memoDate, setMemoDate] = useState<string | null>(null);
+  const [memoText, setMemoText] = useState('');
+  const [memoSaving, setMemoSaving] = useState(false);
+  const lastTapRef = useRef<{ date: string; time: number } | null>(null);
+
+  useEffect(() => {
+    return onSnapshot(collection(db, 'dayNotes'), (snap) => {
+      const map: Record<string, DayNote> = {};
+      snap.docs.forEach(d => {
+        const data = d.data() as Omit<DayNote, 'id'>;
+        if (data.date) map[data.date] = { id: d.id, ...data };
+      });
+      setDayNotes(map);
+    }, (err) => console.warn('dayNotes snapshot error', err));
+  }, []);
+
+  const openMemo = (dateStr: string) => {
+    setMemoDate(dateStr);
+    setMemoText(dayNotes[dateStr]?.content || '');
+  };
+
+  // 한 번 누르면 날짜 선택, 같은 칸을 빠르게 두 번 누르면(더블클릭/더블탭) 메모 창 열기
+  const handleDayTap = (dateStr: string) => {
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (last && last.date === dateStr && now - last.time < 400) {
+      lastTapRef.current = null;
+      openMemo(dateStr);
+      return;
+    }
+    lastTapRef.current = { date: dateStr, time: now };
+    setCalSelectedDate(dateStr);
+    setSelectedTripId(null);
+  };
+
+  const saveMemo = async () => {
+    if (!memoDate) return;
+    setMemoSaving(true);
+    try {
+      const text = memoText.trim();
+      if (!text) {
+        if (dayNotes[memoDate]) await deleteDoc(doc(db, 'dayNotes', dayNotes[memoDate].id));
+      } else {
+        await setDoc(doc(db, 'dayNotes', memoDate), { date: memoDate, content: text, authorName, updatedAt: Timestamp.now() });
+      }
+      setMemoDate(null);
+    } catch (err) {
+      console.error(err);
+      alert('메모를 저장하지 못했습니다. (Firestore 보안 규칙에 dayNotes 권한이 있는지 확인해주세요)');
+    } finally { setMemoSaving(false); }
+  };
+
+  const deleteMemo = async () => {
+    if (!memoDate || !dayNotes[memoDate]) { setMemoDate(null); return; }
+    if (!window.confirm('이 날짜의 메모를 삭제할까요?')) return;
+    try { await deleteDoc(doc(db, 'dayNotes', dayNotes[memoDate].id)); setMemoDate(null); } catch (err) { console.error(err); }
+  };
+
+  // ---------- 출장 ----------
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  const [isTripFormOpen, setIsTripFormOpen] = useState(false);
+  const [tripTitle, setTripTitle] = useState('');
+  const [tripAssignee, setTripAssignee] = useState('');
+  const [tripStart, setTripStart] = useState('');
+  const [tripEnd, setTripEnd] = useState('');
+  const [tripPlace, setTripPlace] = useState('');
+
+  useEffect(() => {
+    return onSnapshot(collection(db, 'trips'), (snap) => {
+      setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Trip).filter(t => !!t.startDate));
+    }, (err) => console.warn('trips snapshot error', err));
+  }, []);
+
+  const addTrip = async () => {
+    if (!tripTitle.trim() || !tripStart) { alert('출장명과 시작일을 입력해주세요.'); return; }
+    let start = tripStart;
+    let end = tripEnd || tripStart;
+    if (end < start) { const tmp = start; start = end; end = tmp; }
+    try {
+      await addDoc(collection(db, 'trips'), {
+        title: tripTitle.trim(),
+        startDate: start,
+        endDate: end,
+        place: tripPlace.trim() || null,
+        assigneeId: tripAssignee || null,
+        assigneeName: teachers.find(t => t.id === tripAssignee)?.name || null,
+        authorName,
+        createdAt: Timestamp.now(),
+      });
+      setTripTitle(''); setTripAssignee(''); setTripStart(''); setTripEnd(''); setTripPlace('');
+      setIsTripFormOpen(false);
+      setCalBaseDate(parseISO(start));
+    } catch (err) {
+      console.error(err);
+      alert('출장을 저장하지 못했습니다. (Firestore 보안 규칙에 trips 권한이 있는지 확인해주세요)');
+    }
+  };
+
+  const deleteTrip = async (id: string) => {
+    if (!window.confirm('이 출장 일정을 삭제할까요?')) return;
+    try { await deleteDoc(doc(db, 'trips', id)); setSelectedTripId(null); } catch (err) { console.error(err); }
+  };
+
+  const tripNights = (t: Trip) => {
+    try {
+      const days = Math.round((parseISO(t.endDate || t.startDate).getTime() - parseISO(t.startDate).getTime()) / 86400000);
+      return days <= 0 ? '당일' : `${days}박 ${days + 1}일`;
+    } catch { return ''; }
+  };
+
+  // 달력을 주 단위로 나누고, 주마다 출장 띠의 위치(시작 칸, 끝 칸, 줄 번호)를 계산
+  const calWeeks = useMemo(() => {
+    const weeks: { days: Date[]; segs: { trip: Trip; startCol: number; endCol: number; lane: number; contL: boolean; contR: boolean }[]; laneCount: number }[] = [];
+    for (let i = 0; i + 7 <= calDays.length; i += 7) {
+      const days = calDays.slice(i, i + 7);
+      const dayStrs = days.map(d => format(d, 'yyyy-MM-dd'));
+      const ws = dayStrs[0];
+      const we = dayStrs[6];
+      const overlapping = trips
+        .filter(t => t.startDate <= we && (t.endDate || t.startDate) >= ws)
+        .sort((a, b) => a.startDate.localeCompare(b.startDate) || (b.endDate || b.startDate).localeCompare(a.endDate || a.startDate));
+      const laneEnds: number[] = [];
+      const segs = overlapping.map(t => {
+        const end = t.endDate || t.startDate;
+        const startCol = t.startDate < ws ? 0 : Math.max(0, dayStrs.indexOf(t.startDate));
+        const endCol = end > we ? 6 : Math.max(startCol, dayStrs.indexOf(end));
+        let lane = laneEnds.findIndex(e => e < startCol);
+        if (lane === -1) { lane = laneEnds.length; laneEnds.push(endCol); } else { laneEnds[lane] = endCol; }
+        return { trip: t, startCol, endCol, lane, contL: t.startDate < ws, contR: end > we };
+      });
+      weeks.push({ days, segs, laneCount: laneEnds.length });
+    }
+    return weeks;
+  }, [calDays, trips]);
+
+  const tripsOnDate = (dateStr: string) => trips.filter(t => t.startDate <= dateStr && (t.endDate || t.startDate) >= dateStr);
+  const selectedTrip = selectedTripId ? trips.find(t => t.id === selectedTripId) || null : null;
 
   // 이번 달 진행률
   const monthProgress = useMemo(() => {
@@ -2489,8 +2705,8 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
 
       {subTab === 'calendar' && (
         <div className="space-y-4">
-          <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4 sm:p-8">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
+          <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-3 sm:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-5">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between text-xs font-bold text-text-muted mb-1.5">
                   <span>{format(calBaseDate, 'M월')} 할 일 진행률</span>
@@ -2500,96 +2716,265 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                   <div className="h-full bg-accent-color rounded-full transition-all" style={{ width: `${monthProgress.pct}%` }} />
                 </div>
               </div>
-              <button onClick={printWeeklyExport} className="h-9 px-4 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 shrink-0 justify-center">
-                <Printer size={14} /> 이번 주 인쇄/내보내기
-              </button>
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => setIsTripFormOpen(v => !v)} className={cn("h-9 px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center flex-1 sm:flex-none", isTripFormOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
+                  <Plane size={14} /> 출장 등록
+                </button>
+                <button onClick={printWeeklyExport} className="h-9 px-4 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 justify-center flex-1 sm:flex-none">
+                  <Printer size={14} /> <span className="sm:hidden">이번 주 인쇄</span><span className="hidden sm:inline">이번 주 인쇄/내보내기</span>
+                </button>
+              </div>
             </div>
-            <div className="flex items-center justify-center gap-3 mb-6">
+
+            {isTripFormOpen && (
+              <div className="mb-5 p-4 bg-bg-primary border border-border-color rounded-xl space-y-2">
+                <h4 className="text-xs font-bold text-text-main flex items-center gap-1.5"><Plane size={13} /> 출장 등록 <span className="font-normal text-text-muted">· 기간 동안 캘린더에 띠로 표시됩니다</span></h4>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input type="text" value={tripTitle} onChange={(e) => setTripTitle(e.target.value)} placeholder="출장명 (예: 교육청 연수)" className="flex-1 h-10 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+                  <select value={tripAssignee} onChange={(e) => setTripAssignee(e.target.value)} className="h-10 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color">
+                    <option value="">출장자 선택</option>
+                    {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <input type="text" value={tripPlace} onChange={(e) => setTripPlace(e.target.value)} placeholder="장소 (선택)" className="sm:w-40 h-10 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="text-[11px] font-bold text-text-muted shrink-0 w-10">시작일</span>
+                    <input type="date" value={tripStart} onChange={(e) => { setTripStart(e.target.value); if (!tripEnd || tripEnd < e.target.value) setTripEnd(e.target.value); }} className="flex-1 h-10 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+                  </div>
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="text-[11px] font-bold text-text-muted shrink-0 w-10">종료일</span>
+                    <input type="date" value={tripEnd} min={tripStart || undefined} onChange={(e) => setTripEnd(e.target.value)} className="flex-1 h-10 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+                  </div>
+                  <button onClick={addTrip} className="h-10 px-5 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all flex items-center gap-1.5 justify-center shrink-0">
+                    <Plus size={16} /> 등록
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-3">
               <button onClick={() => setCalBaseDate(subMonths(calBaseDate, 1))} className="p-2.5 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronLeft size={18} /></button>
-              <h3 className="font-serif text-2xl font-bold text-text-main min-w-[160px] text-center">{format(calBaseDate, 'yyyy년 M월')}</h3>
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-text-main min-w-[120px] sm:min-w-[160px] text-center">{format(calBaseDate, 'yyyy년 M월')}</h3>
               <button onClick={() => setCalBaseDate(addMonths(calBaseDate, 1))} className="p-2.5 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronRight size={18} /></button>
               <button onClick={() => setCalBaseDate(startOfToday())} className="px-4 py-2 bg-bg-primary border border-border-color rounded-full text-sm font-bold hover:bg-gray-50 transition-colors">오늘</button>
             </div>
-            <div className="grid grid-cols-7 rounded-xl overflow-hidden border border-border-color">
-              {['월', '화', '수', '목', '금', '토', '일'].map(d => (
-                <div key={d} className={cn("text-center text-xs font-bold uppercase py-3 bg-bg-primary border-b border-border-color", d === '일' ? "text-sun" : d === '토' ? "text-sat" : "text-text-muted")}>{d}</div>
-              ))}
-              {calDays.map((d, idx) => {
-                const dateStr = format(d, 'yyyy-MM-dd');
-                const items = todosByDate[dateStr] || [];
-                const isCurMonth = isSameMonth(d, calBaseDate);
-                const isToday = isSameDay(d, startOfToday());
-                const holidayName = koreanHolidays[dateStr];
-                const dayWeather = weatherDaily[dateStr];
-                const isOffDay = !!holidayName || d.getDay() === 0;
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => setCalSelectedDate(dateStr)}
-                    className={cn(
-                      "min-h-[128px] p-2.5 border-b border-r border-border-color cursor-pointer transition-colors flex flex-col",
-                      !isCurMonth ? "bg-gray-50/30" : "bg-surface hover:bg-gray-50/50",
-                      calSelectedDate === dateStr && "ring-2 ring-inset ring-accent-color"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-1 mb-1.5">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className={cn("text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center shrink-0", isToday ? "bg-accent-color text-on-accent" : !isCurMonth ? "text-gray-300" : isOffDay ? "text-sun" : "text-text-main")}>{format(d, 'd')}</span>
-                        {holidayName && <span className="text-[8px] font-bold text-sun truncate" title={holidayName}>{holidayName}</span>}
+            <p className="text-center text-[11px] text-text-muted mb-4">날짜 칸을 <b>두 번 누르면</b> 그날의 메모를 쓸 수 있어요 · 출장 띠를 누르면 상세 정보가 보여요</p>
+
+            <div className="rounded-xl overflow-hidden border border-border-color">
+              <div className="grid grid-cols-7">
+                {['월', '화', '수', '목', '금', '토', '일'].map(d => (
+                  <div key={d} className={cn("text-center text-xs font-bold uppercase py-2 sm:py-3 bg-bg-primary border-b border-border-color", d === '일' ? "text-sun" : d === '토' ? "text-sat" : "text-text-muted")}>{d}</div>
+                ))}
+              </div>
+              {calWeeks.map((week, wi) => (
+                <div
+                  key={wi}
+                  className="grid grid-cols-7 min-h-[96px] sm:min-h-[128px]"
+                  style={{ gridTemplateRows: ['auto', ...Array.from({ length: week.laneCount }, () => '20px'), '1fr'].join(' ') }}
+                >
+                  {/* 1) 날짜 칸 배경 (클릭/더블클릭 영역) */}
+                  {week.days.map((d, di) => {
+                    const dateStr = format(d, 'yyyy-MM-dd');
+                    const isCurMonth = isSameMonth(d, calBaseDate);
+                    return (
+                      <div
+                        key={'bg' + di}
+                        onClick={() => handleDayTap(dateStr)}
+                        onDoubleClick={(e) => e.preventDefault()}
+                        style={{ gridColumn: di + 1, gridRow: '1 / -1' }}
+                        className={cn(
+                          "border-b border-r border-border-color cursor-pointer transition-colors touch-manipulation",
+                          di === 6 && "border-r-0",
+                          !isCurMonth ? "bg-gray-50/30" : "bg-surface hover:bg-gray-50/50",
+                          calSelectedDate === dateStr && "ring-2 ring-inset ring-accent-color"
+                        )}
+                      />
+                    );
+                  })}
+
+                  {/* 2) 날짜 숫자 · 공휴일 · 메모 표시 · 날씨 */}
+                  {week.days.map((d, di) => {
+                    const dateStr = format(d, 'yyyy-MM-dd');
+                    const isCurMonth = isSameMonth(d, calBaseDate);
+                    const isToday = isSameDay(d, startOfToday());
+                    const holidayName = koreanHolidays[dateStr];
+                    const dayWeather = weatherDaily[dateStr];
+                    const isOffDay = !!holidayName || d.getDay() === 0;
+                    const hasMemo = !!dayNotes[dateStr];
+                    return (
+                      <div key={'hd' + di} style={{ gridColumn: di + 1, gridRow: 1 }} className="pointer-events-none relative z-10 min-w-0 px-1 pt-1 sm:px-2.5 sm:pt-2.5 pb-1 flex items-start justify-between gap-1">
+                        <div className="flex items-center gap-0.5 sm:gap-1 min-w-0">
+                          <span className={cn("text-xs sm:text-sm font-bold w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center shrink-0", isToday ? "bg-accent-color text-on-accent" : !isCurMonth ? "text-gray-300" : isOffDay ? "text-sun" : d.getDay() === 6 ? "text-sat" : "text-text-main")}>{format(d, 'd')}</span>
+                          {hasMemo && <StickyNote size={11} className="text-amber-600 shrink-0" />}
+                          {holidayName && <span className="hidden sm:inline text-[8px] font-bold text-sun truncate" title={holidayName}>{holidayName}</span>}
+                        </div>
+                        {dayWeather && (
+                          <span className="hidden sm:flex items-center gap-0.5 text-[9px] text-text-muted opacity-70 whitespace-nowrap shrink-0" title={weatherIconOf(dayWeather.code).label}>
+                            <span>{weatherIconOf(dayWeather.code).icon}</span>
+                            <span className="font-bold">{dayWeather.max}°/{dayWeather.min}°</span>
+                          </span>
+                        )}
                       </div>
-                      {dayWeather && (
-                        <span className="flex items-center gap-0.5 text-[9px] text-text-muted opacity-70 whitespace-nowrap shrink-0" title={weatherIconOf(dayWeather.code).label}>
-                          <span>{weatherIconOf(dayWeather.code).icon}</span>
-                          <span className="font-bold">{dayWeather.max}°/{dayWeather.min}°</span>
-                        </span>
+                    );
+                  })}
+
+                  {/* 3) 출장 띠 (여러 날을 가로지르는 막대) */}
+                  {week.segs.map(seg => (
+                    <div
+                      key={'trip' + seg.trip.id}
+                      onClick={(e) => { e.stopPropagation(); setSelectedTripId(seg.trip.id); setCalSelectedDate(null); }}
+                      title={`${seg.trip.title}${seg.trip.assigneeName ? ' · ' + seg.trip.assigneeName : ''} (${seg.trip.startDate} ~ ${seg.trip.endDate})`}
+                      style={{ gridColumn: `${seg.startCol + 1} / ${seg.endCol + 2}`, gridRow: seg.lane + 2 }}
+                      className={cn(
+                        "relative z-20 h-[18px] self-center flex items-center gap-1 px-1.5 text-[9px] sm:text-[10px] font-bold cursor-pointer shadow-sm hover:brightness-110 transition-all min-w-0 overflow-hidden",
+                        tripColorOf(seg.trip),
+                        seg.contL ? "ml-0 rounded-l-none" : "ml-1 rounded-l-full",
+                        seg.contR ? "mr-0 rounded-r-none" : "mr-1 rounded-r-full",
+                        selectedTripId === seg.trip.id && "ring-2 ring-offset-1 ring-accent-color"
                       )}
+                    >
+                      <Plane size={10} className="shrink-0" />
+                      <span className="truncate">{seg.contL ? '…' : ''}{seg.trip.title}{seg.trip.assigneeName ? ` · ${seg.trip.assigneeName}` : ''}</span>
                     </div>
-                    <div className="flex-1 space-y-1 overflow-hidden">
-                      {items.slice(0, 3).map((t: Todo) => {
-                        const overdue = t.dueDate && t.dueDate < today && t.status !== 'done';
-                        const cat = todoCategoryOf(t.category);
-                        return (
-                          <div
-                            key={t.id}
-                            onClick={(e) => { e.stopPropagation(); setCalSelectedDate(dateStr); }}
-                            title={t.title}
-                            className={cn(
-                              "px-1.5 py-1 text-[9px] font-bold rounded border truncate flex items-center gap-1",
-                              t.status === 'done' ? "bg-gray-50 text-gray-400 border-gray-100 line-through" : overdue ? "bg-red-50 text-red-600 border-red-200" : cn(cat.bg, cat.text, cat.border)
-                            )}
-                          >
-                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", cat.dot)} />
-                            <span className="truncate">{t.title}</span>
-                          </div>
-                        );
-                      })}
-                      {items.length > 3 && (
-                        <div className="text-[8px] text-text-muted pl-1 font-bold italic opacity-60">+ {items.length - 3} more</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  ))}
+
+                  {/* 4) 할 일 */}
+                  {week.days.map((d, di) => {
+                    const dateStr = format(d, 'yyyy-MM-dd');
+                    const items = todosByDate[dateStr] || [];
+                    return (
+                      <div key={'it' + di} style={{ gridColumn: di + 1, gridRow: week.laneCount + 2 }} className="pointer-events-none relative z-10 min-w-0 px-1 sm:px-2.5 pt-1 pb-1.5 space-y-1 overflow-hidden">
+                        {items.slice(0, 3).map((t: Todo) => {
+                          const overdue = t.dueDate && t.dueDate < today && t.status !== 'done';
+                          const cat = todoCategoryOf(t.category);
+                          return (
+                            <div
+                              key={t.id}
+                              title={t.title}
+                              className={cn(
+                                "px-1 sm:px-1.5 py-0.5 sm:py-1 text-[9px] font-bold rounded border truncate flex items-center gap-1",
+                                t.status === 'done' ? "bg-gray-50 text-gray-400 border-gray-100 line-through" : overdue ? "bg-red-50 text-red-600 border-red-200" : cn(cat.bg, cat.text, cat.border)
+                              )}
+                            >
+                              <span className={cn("w-1.5 h-1.5 rounded-full shrink-0 hidden sm:inline-block", cat.dot)} />
+                              <span className="truncate">{t.title}</span>
+                            </div>
+                          );
+                        })}
+                        {items.length > 3 && (
+                          <div className="text-[8px] text-text-muted pl-1 font-bold italic opacity-60">+ {items.length - 3}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
 
-          {calSelectedDate && (
-            <div className="bg-surface rounded-2xl border border-amber-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-text-main">{calSelectedDate} 마감 할 일</h3>
-                <button onClick={() => setCalSelectedDate(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted transition-colors"><X size={16} /></button>
+          {selectedTrip && (
+            <div className="bg-surface rounded-2xl border border-border-color p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-text-main flex items-center gap-2"><span className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0", tripColorOf(selectedTrip))}><Plane size={11} /></span>{selectedTrip.title}</h3>
+                  <p className="text-xs text-text-muted mt-1">{selectedTrip.startDate} ~ {selectedTrip.endDate} · {tripNights(selectedTrip)}</p>
+                </div>
+                <button onClick={() => setSelectedTripId(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted transition-colors shrink-0"><X size={16} /></button>
               </div>
-              {(todosByDate[calSelectedDate] || []).length === 0 ? (
-                <p className="text-xs text-text-muted italic py-2">이 날짜에 마감인 할 일이 없습니다.</p>
-              ) : (
-                <div className="space-y-2">
-                  {(todosByDate[calSelectedDate] || []).map(t => <TodoRow key={t.id} t={t} compact />)}
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {selectedTrip.assigneeName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-accent-color">{selectedTrip.assigneeName}</span>}
+                {selectedTrip.place && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-text-muted flex items-center gap-1"><MapPin size={10} />{selectedTrip.place}</span>}
+                {selectedTrip.authorName && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-text-muted">등록: {selectedTrip.authorName}</span>}
+              </div>
+              <button onClick={() => deleteTrip(selectedTrip.id)} className="h-8 px-3 rounded-lg text-xs font-bold text-red-500 border border-red-100 hover:bg-red-50 transition-colors flex items-center gap-1.5"><Trash2 size={13} /> 출장 삭제</button>
+            </div>
+          )}
+
+          {calSelectedDate && (
+            <div className="bg-surface rounded-2xl border border-amber-200 p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-text-main">{format(parseISO(calSelectedDate), 'M월 d일 (EEE)', { locale: ko })}</h3>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => openMemo(calSelectedDate)} className="h-8 px-3 rounded-full text-xs font-bold bg-bg-primary border border-border-color hover:border-accent-color hover:text-accent-color transition-colors flex items-center gap-1.5"><StickyNote size={13} /> {dayNotes[calSelectedDate] ? '메모 수정' : '메모 쓰기'}</button>
+                  <button onClick={() => setCalSelectedDate(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted transition-colors"><X size={16} /></button>
+                </div>
+              </div>
+
+              {dayNotes[calSelectedDate] && (
+                <div onClick={() => openMemo(calSelectedDate)} className="p-3 rounded-xl bg-amber-50 border border-amber-200 cursor-pointer">
+                  <p className="text-[10px] font-bold text-amber-700 mb-1 flex items-center gap-1"><StickyNote size={11} /> 메모{dayNotes[calSelectedDate].authorName ? ` · ${dayNotes[calSelectedDate].authorName}` : ''}</p>
+                  <p className="text-sm text-text-main whitespace-pre-wrap leading-relaxed">{dayNotes[calSelectedDate].content}</p>
                 </div>
               )}
+
+              {tripsOnDate(calSelectedDate).length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-text-muted">출장</p>
+                  {tripsOnDate(calSelectedDate).map(t => (
+                    <div key={t.id} onClick={() => { setSelectedTripId(t.id); setCalSelectedDate(null); }} className="p-2.5 rounded-xl bg-bg-primary border border-border-color flex items-center gap-2 cursor-pointer hover:border-accent-color transition-colors">
+                      <span className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0", tripColorOf(t))}><Plane size={11} /></span>
+                      <span className="text-sm font-semibold text-text-main truncate flex-1">{t.title}{t.assigneeName ? ` · ${t.assigneeName}` : ''}</span>
+                      <span className="text-[10px] text-text-muted shrink-0">{t.startDate.slice(5)} ~ {t.endDate.slice(5)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold text-text-muted">마감 할 일</p>
+                {(todosByDate[calSelectedDate] || []).length === 0 ? (
+                  <p className="text-xs text-text-muted italic py-1">이 날짜에 마감인 할 일이 없습니다.</p>
+                ) : (
+                  (todosByDate[calSelectedDate] || []).map(t => <TodoRow key={t.id} t={t} compact />)
+                )}
+              </div>
             </div>
           )}
         </div>
       )}
+
+      {/* 날짜 메모 창 (날짜 칸 더블클릭 / 두 번 터치) */}
+      <AnimatePresence>
+        {memoDate && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setMemoDate(null)}
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[150] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full sm:max-w-md bg-surface border border-border-color rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 select-text"
+              style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-serif text-lg font-bold text-text-main flex items-center gap-2"><StickyNote size={18} className="text-amber-600" />{format(parseISO(memoDate), 'yyyy년 M월 d일 (EEE)', { locale: ko })} 메모</h3>
+                <button onClick={() => setMemoDate(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted"><X size={18} /></button>
+              </div>
+              <textarea
+                autoFocus
+                value={memoText}
+                onChange={(e) => setMemoText(e.target.value)}
+                placeholder="이 날의 메모나 노트를 자유롭게 적어주세요"
+                rows={8}
+                className="w-full p-3 bg-bg-primary border border-border-color rounded-xl text-sm outline-none focus:border-accent-color resize-none leading-relaxed"
+              />
+              {dayNotes[memoDate]?.updatedAt?.toDate && (
+                <p className="text-[10px] text-text-muted mt-1.5">마지막 수정: {dayNotes[memoDate].authorName || ''} · {format(dayNotes[memoDate].updatedAt.toDate(), 'yyyy-MM-dd HH:mm')}</p>
+              )}
+              <div className="flex items-center gap-2 mt-4">
+                {dayNotes[memoDate] && (
+                  <button onClick={deleteMemo} className="h-10 px-4 rounded-xl text-sm font-bold text-red-500 border border-red-100 hover:bg-red-50 transition-colors flex items-center gap-1.5"><Trash2 size={14} /> 삭제</button>
+                )}
+                <div className="flex-1" />
+                <button onClick={() => setMemoDate(null)} className="h-10 px-4 rounded-xl text-sm font-bold text-text-muted border border-border-color hover:bg-gray-50 transition-colors">취소</button>
+                <button onClick={saveMemo} disabled={memoSaving} className="h-10 px-5 rounded-xl text-sm font-bold bg-accent-color text-on-accent hover:opacity-90 transition-all disabled:opacity-50">{memoSaving ? '저장 중…' : '저장'}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {subTab === 'notes' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

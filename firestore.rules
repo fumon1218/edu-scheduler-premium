@@ -67,5 +67,15 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff');
     }
+
+    // 업무 관리 캘린더 - 날짜별 메모 (문서 ID = yyyy-MM-dd)
+    match /dayNotes/{dateId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // 업무 관리 캘린더 - 출장 일정 (시작일~종료일 띠 표시)
+    match /trips/{tripId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }
