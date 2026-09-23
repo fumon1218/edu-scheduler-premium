@@ -153,6 +153,10 @@ const DEFAULT_LOCATIONS = ['1층 안전체험관', '1층 바리스타체험실',
 const DEFAULT_TARGETS = ['유초등', '중고등', '전공과'];
 const DAYS = ['월', '화', '수', '목', '금'];
 
+// 항상 관리자로 들어올 수 있는 소유자 계정 (구글 로그인 이메일)
+// ※ firestore.rules 의 isOwner() 에 적힌 이메일과 반드시 같아야 합니다.
+const OWNER_EMAILS = ['fumon1218@gmail.com'];
+
 const CHURCH_CALENDAR_URL = 'https://fumon1218.github.io/church-calendar/';
 
 // --- 실시간 날씨 (강릉) / 대한민국 공휴일 ---
@@ -344,7 +348,11 @@ export default function App() {
   // Account Management State
   const [newUserId, setNewUserId] = useState('');
   const [newUserPw, setNewUserPw] = useState('');
-  const [registeredUsers, setRegisteredUsers] = useState<{id: string, role: string}[]>([]);
+  const [registeredUsers, setRegisteredUsers] = useState<{ uid: string; id: string; email?: string; name?: string; role: string }[]>([]);
+  // 접근 권한: 승인된 계정만 앱 사용 가능 (checking → approved | pending)
+  const [accessState, setAccessState] = useState<'checking' | 'approved' | 'pending'>('checking');
+  const [accessRequests, setAccessRequests] = useState<{ uid: string; email: string; name?: string; photoURL?: string; requestedAt?: any }[]>([]);
+  const canRead = !!user && accessState === 'approved';
 
   // Form State
   const [formData, setFormData] = useState({
@@ -395,24 +403,35 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        const id = u.email?.split('@')[0];
-        if (id?.startsWith('admin')) {
+        const email = (u.email || '').toLowerCase();
+        if (OWNER_EMAILS.includes(email)) {
+          // 소유자: 항상 관리자. 계정 목록에도 자동 등록
           setIsAdmin(true);
+          setAccessState('approved');
+          setDoc(doc(db, 'registered_users', u.uid), { id: email, email, name: u.displayName || '', role: 'admin' }, { merge: true }).catch(e => console.warn('owner register failed', e));
         } else {
           try {
             const userDoc = await getDoc(doc(db, 'registered_users', u.uid));
             if (userDoc.exists()) {
               setIsAdmin(userDoc.data().role === 'admin');
+              setAccessState('approved');
             } else {
+              // 승인되지 않은 계정: 관리자에게 승인 요청을 남기고 대기 화면으로
               setIsAdmin(false);
+              setAccessState('pending');
+              await setDoc(doc(db, 'access_requests', u.uid), {
+                uid: u.uid, email, name: u.displayName || '', photoURL: u.photoURL || '', requestedAt: serverTimestamp(),
+              }, { merge: true }).catch(e => console.warn('access request failed', e));
             }
           } catch (e) {
             console.error("Role check error:", e);
             setIsAdmin(false);
+            setAccessState('pending');
           }
         }
       } else {
         setIsAdmin(false);
+        setAccessState('checking');
       }
       
       try {
@@ -434,22 +453,52 @@ export default function App() {
   useEffect(() => {
     if (!isAdmin) return;
     const q = query(collection(db, 'registered_users'), orderBy('id'));
-    return onSnapshot(q, (snapshot) => {
-      setRegisteredUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-    });
+    const u1 = onSnapshot(q, (snapshot) => {
+      setRegisteredUsers(snapshot.docs.map(d => ({ ...d.data(), uid: d.id } as any)));
+    }, err => console.warn('registered_users snapshot error', err));
+    const u2 = onSnapshot(collection(db, 'access_requests'), (snapshot) => {
+      setAccessRequests(snapshot.docs.map(d => ({ ...d.data(), uid: d.id } as any)));
+    }, err => console.warn('access_requests snapshot error', err));
+    return () => { u1(); u2(); };
   }, [isAdmin]);
 
+  const approveAccess = async (req: { uid: string; email: string; name?: string }, role: 'user' | 'admin' = 'user') => {
+    try {
+      await setDoc(doc(db, 'registered_users', req.uid), { id: req.email, email: req.email, name: req.name || '', role, createdAt: serverTimestamp() });
+      await deleteDoc(doc(db, 'access_requests', req.uid));
+      showNotify(`${req.name || req.email} 님을 승인했습니다.`);
+    } catch (err) { console.error(err); showNotify('승인 중 오류가 발생했습니다.'); }
+  };
+  const rejectAccess = async (req: { uid: string; email: string }) => {
+    if (!window.confirm(`${req.email} 의 접근 요청을 거절할까요?`)) return;
+    try { await deleteDoc(doc(db, 'access_requests', req.uid)); } catch (err) { console.error(err); }
+  };
+  const toggleUserRole = async (ru: { uid: string; id: string; role: string }) => {
+    const next = ru.role === 'admin' ? 'user' : 'admin';
+    if (!window.confirm(`${ru.id} 을(를) ${next === 'admin' ? '관리자로' : '일반 사용자로'} 바꿀까요?`)) return;
+    try { await updateDoc(doc(db, 'registered_users', ru.uid), { role: next }); } catch (err) { console.error(err); showNotify('권한 변경 중 오류가 발생했습니다.'); }
+  };
+  const recheckAccess = async () => {
+    if (!user) return;
+    try {
+      const userDoc = await getDoc(doc(db, 'registered_users', user.uid));
+      if (userDoc.exists()) { setIsAdmin(userDoc.data().role === 'admin'); setAccessState('approved'); }
+      else showNotify('아직 승인되지 않았습니다. 관리자에게 승인을 요청해주세요.');
+    } catch { showNotify('아직 승인되지 않았습니다.'); }
+  };
+
   useEffect(() => {
+    if (!canRead) return;
     const q = query(collection(db, 'schedules'), orderBy('startTime'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Schedule));
       if (!snapshot.metadata.fromCache) setSchedulesLoaded(true);
-    });
+    }, err => console.warn('schedules snapshot error', err));
     return () => unsubscribe();
-  }, []);
+  }, [canRead]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!canRead) return;
     setGnStatus('connecting');
     try {
       return subscribeGangneung({
@@ -461,7 +510,7 @@ export default function App() {
       setGnStatus('error');
       setGnError(describeHubError(err));
     }
-  }, [user?.uid]);
+  }, [user?.uid, canRead]);
 
   useEffect(() => {
     if (!BRIDGE_MIRROR_ENABLED || !user || !isAdmin || !isAuthInitialCheckDone || !schedulesLoaded) return;
@@ -481,20 +530,21 @@ export default function App() {
   }, [user?.uid, isAdmin, isAuthInitialCheckDone, schedulesLoaded, schedules, gnRooms]);
 
   useEffect(() => {
+    if (!canRead) return;
     const q = query(collection(db, 'system_notifications'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
       setNotifs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as SystemNotification));
-    });
-  }, []);
+    }, err => console.warn('system_notifications snapshot error', err));
+  }, [canRead]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!canRead) return;
     return onSnapshot(collection(db, 'gnEntryTeachers'), (snapshot) => {
       const map: Record<string, string> = {};
       snapshot.forEach(d => { const v = d.data().teacherId; if (v) map[d.id] = v; });
       setGnEntryTeachers(map);
     }, err => console.warn('gnEntryTeachers snapshot error', err));
-  }, [user?.uid]);
+  }, [user?.uid, canRead]);
 
   const assignGnEntryTeacher = async (entryId: string, teacherId: string) => {
     try {
@@ -510,6 +560,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!canRead) return;
     const q = query(collection(db, 'teachers'), orderBy('name'));
     return onSnapshot(q, (snapshot) => {
       const fetchedTeachers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Teacher);
@@ -517,10 +568,11 @@ export default function App() {
       if (fetchedTeachers.length > 0 && !selectedTeacherId) {
         setSelectedTeacherId(fetchedTeachers[0].id);
       }
-    });
-  }, [selectedTeacherId]);
+    }, err => console.warn('teachers snapshot error', err));
+  }, [selectedTeacherId, canRead]);
 
   useEffect(() => {
+    if (!canRead) return;
     const unsub = onSnapshot(doc(db, 'settings', 'config'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -542,9 +594,9 @@ export default function App() {
           });
         });
       }
-    });
+    }, err => console.warn('settings/config snapshot error', err));
     return () => unsub();
-  }, []);
+  }, [canRead]);
 
   useEffect(() => {
     if (!editingId) {
@@ -559,7 +611,7 @@ export default function App() {
 
   // 업무 관리 알림 (상단 종 · 메뉴 배지)
   const [myTeacherIdApp] = useMyTeacherId(teachers, user?.displayName || '관리자');
-  const taskAlerts = useTaskAlerts(myTeacherIdApp, user?.displayName || '관리자', !!user);
+  const taskAlerts = useTaskAlerts(myTeacherIdApp, user?.displayName || '관리자', canRead);
   const [alertsOpenReq, setAlertsOpenReq] = useState(0);
   const openTaskAlerts = () => { setViewMode('tasks'); setAlertsOpenReq(n => n + 1); };
 
@@ -634,26 +686,9 @@ export default function App() {
     setLoginError('');
     try {
       const email = loginId.includes('@') ? loginId : `${loginId}@edu-admin.com`;
-      try {
-        await signInWithEmailAndPassword(auth, email, loginPw);
-      } catch (err: any) {
-        if (loginId.startsWith('admin')) {
-          try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, loginPw);
-            await setDoc(doc(db, 'registered_users', userCredential.user.uid), {
-              id: loginId,
-              email: email,
-              role: 'admin',
-              createdAt: serverTimestamp()
-            });
-          } catch (createErr: any) {
-            console.error("Bootstrap error:", createErr);
-            throw createErr;
-          }
-        } else {
-          throw err;
-        }
-      }
+      // 보안: 없는 아이디로 로그인해도 계정이 자동으로 만들어지지 않습니다.
+      // 새 계정은 관리자가 설정 > 계정 관리에서만 만들 수 있습니다.
+      await signInWithEmailAndPassword(auth, email, loginPw);
       setLoginId('');
       setLoginPw('');
     } catch (err: any) {
@@ -941,26 +976,28 @@ export default function App() {
     }
   };
 
-  const createNewAccount = async () => {
-    if (!newUserId.trim() || !newUserPw.trim()) return;
+  const createNewAccount = async (idArg?: string, pwArg?: string) => {
+    const accId = (idArg ?? newUserId).trim();
+    const accPw = (pwArg ?? newUserPw).trim();
+    if (!accId || !accPw) return;
     try {
-      const email = newUserId.includes('@') ? newUserId : `${newUserId}@edu.com`;
+      const email = accId.includes('@') ? accId : `${accId}@edu.com`;
       
       const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
       const secondaryAuth = getAuth(secondaryApp);
       
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newUserPw);
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, accPw);
       const newUid = userCredential.user.uid;
       
       await updateDoc(doc(db, 'registered_users', newUid), {
-        id: newUserId,
+        id: accId,
         email: email,
         role: 'user',
         createdAt: serverTimestamp()
       }).catch(async () => {
         const { setDoc } = await import('firebase/firestore');
         await setDoc(doc(db, 'registered_users', newUid), {
-          id: newUserId,
+          id: accId,
           email: email,
           role: 'user',
           createdAt: serverTimestamp()
@@ -971,7 +1008,8 @@ export default function App() {
       
       setNewUserId('');
       setNewUserPw('');
-      showNotify(`계정(${newUserId})이 생성되었습니다.`);
+      ['new-account-id', 'new-account-pw'].forEach(elId => { const el = document.getElementById(elId) as HTMLInputElement | null; if (el) el.value = ''; });
+      showNotify(`계정(${accId})이 생성되었습니다.`);
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/email-already-in-use') {
@@ -983,7 +1021,8 @@ export default function App() {
   };
 
   const deleteAccount = async (uid: string, userId: string) => {
-    if (!window.confirm(`계정(${userId})을 목록에서 삭제하시겠습니까? (인증 서버 데이터는 유지됩니다)`)) return;
+    if (uid === user?.uid) { showNotify('본인 계정은 삭제할 수 없습니다.'); return; }
+    if (!window.confirm(`계정(${userId})의 접근 권한을 삭제하시겠습니까?\n삭제하면 이 계정은 더 이상 앱을 볼 수 없습니다.`)) return;
     try {
       await deleteDoc(doc(db, 'registered_users', uid));
       showNotify('계정 정보가 삭제되었습니다.');
@@ -1078,6 +1117,39 @@ export default function App() {
     );
   }
 
+  // 권한 확인 중: 잠깐 로딩 표시
+  if (accessState === 'checking') {
+    return (
+      <div className="fixed inset-0 bg-surface flex flex-col items-center justify-center z-[1000]">
+        <div className="w-8 h-8 border-2 border-accent-color border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-text-muted mt-4">접근 권한 확인 중...</p>
+      </div>
+    );
+  }
+
+  // 승인되지 않은 계정: 데이터 없이 대기 화면만 보여줌
+  if (accessState !== 'approved') {
+    return (
+      <div className="fixed inset-0 bg-bg-primary flex items-center justify-center p-6 z-[1000]">
+        <div className="w-full max-w-sm bg-surface border border-border-color rounded-3xl shadow-2xl p-8 text-center space-y-4">
+          <div className="w-16 h-16 mx-auto bg-surface rounded-2xl flex items-center justify-center border border-border-color overflow-hidden p-2">
+            <img src={appLogo} alt="Logo" className="w-full h-full object-contain" />
+          </div>
+          <h2 className="font-serif text-xl font-bold text-text-main">승인 대기 중</h2>
+          <p className="text-sm text-text-muted leading-relaxed">
+            <b className="text-text-main">{user.email}</b> 계정은 아직 승인되지 않았습니다.<br />
+            관리자에게 승인을 요청해주세요. 승인 요청은 자동으로 전달되었습니다.
+          </p>
+          <div className="flex gap-2 pt-2">
+            <button onClick={recheckAccess} className="flex-1 h-10 rounded-xl bg-accent-color text-on-accent text-sm font-bold">승인 확인</button>
+            <button onClick={handleLogout} className="flex-1 h-10 rounded-xl border border-border-color text-sm font-bold text-text-muted">로그아웃</button>
+          </div>
+        </div>
+        <AnimatePresence>{showNotification && (<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-8 left-4 right-4 sm:left-auto sm:right-8 bg-text-main text-bg-primary px-6 py-4 rounded-2xl shadow-2xl z-[1001] text-sm font-medium">{notificationMsg}</motion.div>)}</AnimatePresence>
+      </div>
+    );
+  }
+
   // 디오라마 카드 배열 (PC 및 모바일/태블릿 동시 활용)
   const DIORAMA_ITEMS = [
     { name: '강릉분원', src: './diorama-gangneung.jpg', url: 'https://www.gninjae.or.kr' },
@@ -1109,14 +1181,14 @@ export default function App() {
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
           <div onClick={() => setViewMode('tasks')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'tasks' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><ListChecks size={18} /><span>업무 관리</span>{taskAlerts.unreadCount > 0 && <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">{taskAlerts.unreadCount}</span>}</div>
-          <div onClick={openSettings} className={cn("px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
+          <div onClick={openSettings} className={cn("px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span>{isAdmin && accessRequests.length > 0 && <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center" title="승인 대기 중인 계정">{accessRequests.length}</span>}</div>
           <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><Link2 size={18} /><span>강릉 방문예약</span><span className={cn("ml-auto w-2 h-2 rounded-full", gnStatus === 'ok' ? "bg-green-500" : gnStatus === 'error' ? "bg-red-500" : "bg-gray-300")} /></a>
           <a href={CHURCH_CALENDAR_URL} target="_blank" rel="noopener noreferrer" title="교회 캘린더 앱 열기 (새 창)" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><CalendarIcon size={18} /><span>교회 캘린더</span><ExternalLink size={13} className="ml-auto opacity-50" /></a>
           
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.9.0</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.9.1</p>
             </div>
             
             <div className="space-y-3">
@@ -1993,16 +2065,38 @@ export default function App() {
                           </div>
                         </div>
                         
+                        {accessRequests.length > 0 && (
+                          <div className="space-y-2 pt-2">
+                            <p className="text-[11px] font-bold text-red-500">🔔 승인 대기 {accessRequests.length}명 <span className="font-normal text-text-muted">· 구글로 로그인을 시도한 계정</span></p>
+                            <div className="divide-y divide-border-color border border-red-100 rounded-xl overflow-hidden">
+                              {accessRequests.map(req => (
+                                <div key={req.uid} className="flex items-center gap-2 p-3 bg-red-50/40">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-text-main truncate">{req.name || '(이름 없음)'}</p>
+                                    <p className="text-[10px] text-text-muted truncate">{req.email}</p>
+                                  </div>
+                                  <button onClick={() => approveAccess(req)} className="px-2.5 h-7 rounded-lg bg-accent-color text-on-accent text-[10px] font-bold shrink-0">승인</button>
+                                  <button onClick={() => rejectAccess(req)} className="px-2.5 h-7 rounded-lg border border-border-color text-[10px] font-bold text-text-muted hover:text-red-500 shrink-0">거절</button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="space-y-2 pt-2">
+                          <p className="text-[11px] font-bold text-text-muted">승인된 계정 <span className="font-normal">· 이 목록에 있는 사람만 앱을 볼 수 있어요</span></p>
                           <div className="divide-y divide-border-color border border-border-color rounded-xl overflow-hidden">
                             {registeredUsers.map(ru => (
-                              <div key={ru.id} className="flex items-center justify-between p-3 bg-gray-50/50">
-                                <div>
-                                  <p className="text-xs font-bold text-text-main">{ru.id}</p>
-                                  <p className="text-[9px] text-text-muted">{ru.role === 'admin' ? '관리자' : '일반 사용자'}</p>
+                              <div key={ru.uid} className="flex items-center gap-2 p-3 bg-gray-50/50">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-bold text-text-main truncate">{ru.name ? `${ru.name} · ` : ''}{ru.id}</p>
+                                  <p className="text-[9px] text-text-muted">{OWNER_EMAILS.includes((ru.email || '').toLowerCase()) ? '소유자 (관리자)' : ru.role === 'admin' ? '관리자' : '일반 사용자'}{ru.uid === user?.uid ? ' · 나' : ''}</p>
                                 </div>
-                                {ru.id !== 'admin' && (
-                                  <button onClick={() => deleteAccount(ru.id, ru.id)} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                                {ru.uid !== user?.uid && !OWNER_EMAILS.includes((ru.email || '').toLowerCase()) && (
+                                  <>
+                                    <button onClick={() => toggleUserRole(ru)} className="px-2 h-7 rounded-lg border border-border-color text-[10px] font-bold text-text-muted hover:text-accent-color shrink-0">{ru.role === 'admin' ? '일반으로' : '관리자로'}</button>
+                                    <button onClick={() => deleteAccount(ru.uid, ru.id)} title="접근 권한 삭제" className="p-1.5 text-gray-300 hover:text-red-500 transition-colors shrink-0"><Trash2 size={14} /></button>
+                                  </>
                                 )}
                               </div>
                             ))}
