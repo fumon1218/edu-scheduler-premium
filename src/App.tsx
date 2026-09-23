@@ -277,7 +277,14 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'teacher' | 'tasks'>('calendar');
+  // 굿노트 PDF의 "앱에서 열기" 링크 (?date=yyyy-MM-dd)
+  const [deepLinkDate] = useState<string | null>(() => {
+    try { const v = new URLSearchParams(window.location.search).get('date'); return v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; } catch { return null; }
+  });
+  useEffect(() => {
+    if (deepLinkDate) { try { window.history.replaceState(null, '', window.location.pathname); } catch { /* ignore */ } }
+  }, [deepLinkDate]);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'teacher' | 'tasks'>(() => deepLinkDate ? 'tasks' : 'calendar');
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('month');
   const [baseDate, setBaseDate] = useState(startOfToday());
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0); 
@@ -1320,7 +1327,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.9.2</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.9.3</p>
             </div>
             
             <div className="space-y-3">
@@ -2336,7 +2343,7 @@ export default function App() {
             </div>
           </div>
         </div>)}
-          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} koreanHolidays={koreanHolidays} weatherDaily={weatherDaily} schedules={schedules} alertsOpenReq={alertsOpenReq} />}
+          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} koreanHolidays={koreanHolidays} weatherDaily={weatherDaily} schedules={schedules} alertsOpenReq={alertsOpenReq} initialDate={deepLinkDate} appName={appName} />}
       </div>
 
         {/* Mobile Bottom Navigation Bar */}
@@ -2628,7 +2635,447 @@ function useTaskAlerts(myTeacherId: string, myName: string, enabled: boolean) {
   return { alerts, unreadCount, markSeen, seen, comments };
 }
 
-function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedules, alertsOpenReq }: { teachers: Teacher[]; authorName: string; koreanHolidays: Record<string, string>; weatherDaily: Record<string, { max: number; min: number; code: number }>; schedules: Schedule[]; alertsOpenReq: number }) {
+// =====================================================================
+// 굿노트용 하이퍼링크 PDF 플래너
+// - 표지(월 바로가기) → 월간 페이지(날짜를 누르면 일간으로) → 일간 페이지(필기 공간)
+// - 모든 페이지 오른쪽에 월 탭, 일간 페이지에는 이전/다음/월간/앱에서 열기 링크
+// - PDF 도구(jsPDF)와 한글 글꼴(나눔고딕)은 만들 때 인터넷에서 불러옵니다.
+// =====================================================================
+const JSPDF_URLS = [
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+];
+const KFONT_URLS = {
+  regular: [
+    'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/nanumgothic/NanumGothic-Regular.ttf',
+    'https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Regular.ttf',
+  ],
+  bold: [
+    'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/nanumgothic/NanumGothic-Bold.ttf',
+    'https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Bold.ttf',
+  ],
+};
+const plannerFontCache: { r?: string; b?: string } = {};
+
+const loadScriptOnce = (src: string) => new Promise<void>((resolve, reject) => {
+  const s = document.createElement('script');
+  s.src = src;
+  s.async = true;
+  s.onload = () => resolve();
+  s.onerror = () => { s.remove(); reject(new Error('script load failed: ' + src)); };
+  document.head.appendChild(s);
+});
+const loadJsPdf = async (): Promise<any> => {
+  const w = window as any;
+  if (w.jspdf?.jsPDF) return w.jspdf.jsPDF;
+  for (const u of JSPDF_URLS) {
+    try { await loadScriptOnce(u); if (w.jspdf?.jsPDF) return w.jspdf.jsPDF; } catch { /* 다음 주소 시도 */ }
+  }
+  throw new Error('PDF 도구를 불러오지 못했습니다. 인터넷 연결을 확인해주세요.');
+};
+const fetchFontBase64 = async (urls: string[]): Promise<string> => {
+  for (const u of urls) {
+    try {
+      const res = await fetch(u);
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      let bin = '';
+      const CHUNK = 0x8000;
+      for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
+      return btoa(bin);
+    } catch { /* 다음 주소 시도 */ }
+  }
+  throw new Error('한글 글꼴을 불러오지 못했습니다. 인터넷 연결을 확인해주세요.');
+};
+
+interface PlannerInput {
+  appName: string;
+  appUrl: string;
+  startMonth: string; // yyyy-MM
+  endMonth: string;   // yyyy-MM
+  scopeLabel: string;
+  schedules: Schedule[];
+  todos: Todo[];
+  trips: Trip[];
+  dayNotes: Record<string, DayNote>;
+  holidays: Record<string, string>;
+}
+
+async function buildPlannerPdf(input: PlannerInput, onProgress?: (msg: string) => void): Promise<{ blob: Blob; pages: number }> {
+  onProgress?.('PDF 도구 불러오는 중…');
+  const JsPDF = await loadJsPdf();
+  onProgress?.('한글 글꼴 불러오는 중… (처음 한 번만 조금 걸려요)');
+  if (!plannerFontCache.r) plannerFontCache.r = await fetchFontBase64(KFONT_URLS.regular);
+  if (!plannerFontCache.b) plannerFontCache.b = await fetchFontBase64(KFONT_URLS.bold);
+  onProgress?.('페이지 만드는 중…');
+  await new Promise(r => setTimeout(r, 30));
+
+  // ---------- 기본 설정 ----------
+  const W = 1024, H = 768;            // 아이패드 가로 비율 (4:3)
+  const TAB_W = 56;                   // 오른쪽 월 탭 너비
+  const CX0 = 36, CX1 = W - TAB_W - 24; // 본문 영역
+  const pdf = new JsPDF({ orientation: 'landscape', unit: 'pt', format: [W, H], compress: true });
+  pdf.addFileToVFS('NanumGothic-Regular.ttf', plannerFontCache.r);
+  pdf.addFont('NanumGothic-Regular.ttf', 'Nanum', 'normal');
+  pdf.addFileToVFS('NanumGothic-Bold.ttf', plannerFontCache.b);
+  pdf.addFont('NanumGothic-Bold.ttf', 'Nanum', 'bold');
+
+  const C = {
+    accent: [52, 75, 104], text: [34, 43, 50], muted: [110, 120, 130], light: [160, 166, 172],
+    border: [220, 212, 189], line: [235, 229, 213], soft: [247, 243, 235], white: [255, 255, 255],
+    sun: [178, 70, 56], sat: [58, 105, 167], amber: [165, 121, 58], red: [178, 70, 56], green: [62, 124, 116],
+  } as const;
+  const hex = (h: string) => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  const tripRgb = (t: Trip) => { const m = tripColorOf(t).match(/#([0-9A-Fa-f]{6})/); return m ? hex(m[1]) : [...C.accent]; };
+  const fill = (c: readonly number[]) => pdf.setFillColor(c[0], c[1], c[2]);
+  const stroke = (c: readonly number[]) => pdf.setDrawColor(c[0], c[1], c[2]);
+  const color = (c: readonly number[]) => pdf.setTextColor(c[0], c[1], c[2]);
+  const font = (size: number, bold = false) => { pdf.setFont('Nanum', bold ? 'bold' : 'normal'); pdf.setFontSize(size); };
+  const fit = (s: string, maxW: number) => {
+    let t = String(s ?? '');
+    if (pdf.getTextWidth(t) <= maxW) return t;
+    while (t.length > 0 && pdf.getTextWidth(t + '…') > maxW) t = t.slice(0, -1);
+    return t + '…';
+  };
+  const txt = (s: string, x: number, y: number, opt?: any) => pdf.text(String(s ?? ''), x, y, opt);
+
+  // ---------- 기간 · 페이지 번호 ----------
+  const months: Date[] = [];
+  let mc = startOfMonth(parseISO(input.startMonth + '-01'));
+  const mEnd = startOfMonth(parseISO(input.endMonth + '-01'));
+  while (mc <= mEnd && months.length < 12) { months.push(mc); mc = addMonths(mc, 1); }
+  const days: string[] = [];
+  months.forEach(m => { const last = endOfMonth(m); for (let d = m; d <= last; d = addDays(d, 1)) days.push(format(d, 'yyyy-MM-dd')); });
+  const monthPage = (i: number) => 2 + i;
+  const dayIndex = new Map(days.map((d, i) => [d, i] as [string, number]));
+  const dayPage = (d: string) => { const i = dayIndex.get(d); return i === undefined ? null : 2 + months.length + i; };
+  const monthIdxOf = (d: string) => months.findIndex(m => format(m, 'yyyy-MM') === d.slice(0, 7));
+  const totalPages = 1 + months.length + days.length;
+  for (let i = 1; i < totalPages; i++) pdf.addPage([W, H], 'landscape');
+  const rangeStart = days[0], rangeEnd = days[days.length - 1];
+  const today = format(startOfToday(), 'yyyy-MM-dd');
+
+  // ---------- 데이터 정리 ----------
+  const schedByDate: Record<string, Schedule[]> = {};
+  input.schedules.forEach(s => { if (s.date >= rangeStart && s.date <= rangeEnd) (schedByDate[s.date] ||= []).push(s); });
+  Object.values(schedByDate).forEach(l => l.sort((a, b) => a.startTime.localeCompare(b.startTime)));
+  const todoByDate: Record<string, Todo[]> = {};
+  input.todos.forEach(t => { if (t.dueDate && t.dueDate >= rangeStart && t.dueDate <= rangeEnd) (todoByDate[t.dueDate] ||= []).push(t); });
+  Object.values(todoByDate).forEach(l => l.sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0)));
+  const trips = input.trips.filter(t => t.startDate <= rangeEnd && (t.endDate || t.startDate) >= rangeStart).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const tripsOn = (d: string) => trips.filter(t => t.startDate <= d && (t.endDate || t.startDate) >= d);
+
+  // ---------- 공통: 오른쪽 탭 ----------
+  const drawTabs = (activeMonth: number | null, isCover = false) => {
+    const x = W - TAB_W;
+    fill(C.soft); pdf.rect(x, 0, TAB_W, H, 'F');
+    stroke(C.border); pdf.setLineWidth(0.8); pdf.line(x, 0, x, H);
+    // 표지 탭
+    fill(isCover ? C.accent : C.white); stroke(C.border);
+    pdf.roundedRect(x + 6, 16, TAB_W - 12, 40, 6, 6, 'FD');
+    font(10, true); color(isCover ? C.white : C.accent);
+    txt('표지', x + TAB_W / 2, 40, { align: 'center' });
+    pdf.link(x + 6, 16, TAB_W - 12, 40, { pageNumber: 1 });
+    const top = 68, avail = H - top - 16;
+    const th = Math.min(72, avail / months.length);
+    months.forEach((m, i) => {
+      const y = top + i * th;
+      const on = i === activeMonth;
+      fill(on ? C.accent : C.white); stroke(C.border);
+      pdf.roundedRect(x + 6, y + 2, TAB_W - 12, th - 4, 6, 6, 'FD');
+      font(on ? 13 : 12, true); color(on ? C.white : C.text);
+      txt(`${m.getMonth() + 1}월`, x + TAB_W / 2, y + th / 2 + 4, { align: 'center' });
+      pdf.link(x + 6, y + 2, TAB_W - 12, th - 4, { pageNumber: monthPage(i) });
+    });
+  };
+  const navButton = (label: string, x: number, y: number, w: number, target: { pageNumber?: number; url?: string } | null, primary = false) => {
+    fill(primary ? C.accent : C.white); stroke(primary ? C.accent : C.border); pdf.setLineWidth(0.8);
+    pdf.roundedRect(x, y, w, 24, 12, 12, 'FD');
+    font(10, true); color(primary ? C.white : target ? C.text : C.light);
+    txt(label, x + w / 2, y + 16, { align: 'center' });
+    if (target) pdf.link(x, y, w, 24, target);
+  };
+
+  // ---------- 1. 표지 ----------
+  pdf.setPage(1);
+  drawTabs(null, true);
+  fill(C.accent); pdf.rect(0, 0, 14, H, 'F');
+  font(36, true); color(C.accent);
+  txt(input.appName, CX0 + 24, 118);
+  const firstM = months[0], lastM = months[months.length - 1];
+  font(20, false); color(C.text);
+  txt(`${format(firstM, 'yyyy년 M월')} ~ ${format(lastM, getYear(firstM) === getYear(lastM) ? 'M월' : 'yyyy년 M월')} 업무 플래너`, CX0 + 24, 156);
+  font(11, false); color(C.muted);
+  txt(`${input.scopeLabel} · ${format(new Date(), 'yyyy-MM-dd HH:mm')} 기준 · 월 탭이나 날짜를 누르면 해당 페이지로 이동합니다`, CX0 + 24, 182);
+
+  // 월 바로가기 카드
+  const cardW = 200, cardH = 96, gap = 16, perRow = 4;
+  months.forEach((m, i) => {
+    const cx = CX0 + 24 + (i % perRow) * (cardW + gap);
+    const cy = 216 + Math.floor(i / perRow) * (cardH + gap);
+    const mStr = format(m, 'yyyy-MM');
+    const mTodos = input.todos.filter(t => t.dueDate && t.dueDate.startsWith(mStr));
+    const mTrips = trips.filter(t => t.startDate.slice(0, 7) <= mStr && (t.endDate || t.startDate).slice(0, 7) >= mStr);
+    const mClasses = input.schedules.filter(s => s.date.startsWith(mStr)).length;
+    fill(C.white); stroke(C.border); pdf.setLineWidth(1);
+    pdf.roundedRect(cx, cy, cardW, cardH, 10, 10, 'FD');
+    fill(C.accent); pdf.roundedRect(cx, cy, 8, cardH, 4, 4, 'F');
+    font(26, true); color(C.accent); txt(`${m.getMonth() + 1}월`, cx + 22, cy + 42);
+    font(10, false); color(C.muted);
+    txt(`할 일 ${mTodos.length} · 완료 ${mTodos.filter(t => t.status === 'done').length}`, cx + 22, cy + 64);
+    txt(`출장 ${mTrips.length} · 수업 ${mClasses}`, cx + 22, cy + 80);
+    pdf.link(cx, cy, cardW, cardH, { pageNumber: monthPage(i) });
+  });
+
+  // 출장 목록
+  let ty = 216 + Math.ceil(months.length / perRow) * (cardH + gap) + 24;
+  font(14, true); color(C.text); txt('출장 일정', CX0 + 24, ty);
+  stroke(C.border); pdf.setLineWidth(0.8); pdf.line(CX0 + 24, ty + 8, CX1, ty + 8);
+  ty += 28;
+  if (trips.length === 0) { font(11, false); color(C.light); txt('등록된 출장이 없습니다.', CX0 + 24, ty); }
+  const colW = (CX1 - CX0 - 24) / 2;
+  trips.slice(0, 24).forEach((t, i) => {
+    const col = Math.floor(i / 12), row = i % 12;
+    const x = CX0 + 24 + col * colW, y = ty + row * 22;
+    if (y > H - 30) return;
+    const c = tripRgb(t); fill(c); pdf.roundedRect(x, y - 9, 6, 12, 2, 2, 'F');
+    font(11, false); color(C.text);
+    const label = `${t.startDate.slice(5).replace('-', '/')}${t.endDate !== t.startDate ? '~' + t.endDate.slice(5).replace('-', '/') : ''}  ${t.title}${t.assigneeName ? ' · ' + t.assigneeName : ''}`;
+    txt(fit(label, colW - 24), x + 14, y);
+    const p = dayPage(t.startDate < rangeStart ? rangeStart : t.startDate);
+    if (p) pdf.link(x, y - 12, colW - 16, 18, { pageNumber: p });
+  });
+
+  // 앱 열기
+  navButton('업무수첩 앱 열기  ▶', CX1 - 170, 30, 170, { url: input.appUrl }, true);
+
+  // ---------- 2. 월간 페이지 ----------
+  months.forEach((m, mi) => {
+    pdf.setPage(monthPage(mi));
+    drawTabs(mi);
+    const mTitle = format(m, 'yyyy년 M월');
+    font(30, true); color(C.accent); txt(mTitle, CX0, 60);
+    const mTitleW = pdf.getTextWidth(mTitle);
+    const mStr = format(m, 'yyyy-MM');
+    const mTodos = input.todos.filter(t => t.dueDate && t.dueDate.startsWith(mStr));
+    font(11, false); color(C.muted);
+    txt(`할 일 ${mTodos.length}건 · 완료 ${mTodos.filter(t => t.status === 'done').length}건 · 날짜를 누르면 그날 페이지로 이동`, CX0 + mTitleW + 16, 58);
+    // 이전/다음 달
+    navButton(mi > 0 ? `◀  ${months[mi - 1].getMonth() + 1}월` : '◀', CX1 - 176, 36, 84, mi > 0 ? { pageNumber: monthPage(mi - 1) } : null);
+    navButton(mi < months.length - 1 ? `${months[mi + 1].getMonth() + 1}월  ▶` : '▶', CX1 - 84, 36, 84, mi < months.length - 1 ? { pageNumber: monthPage(mi + 1) } : null);
+
+    const gridTop = 104, gridBottom = H - 24;
+    const gridStart = startOfWeek(m, { weekStartsOn: 0 });
+    const lastDay = endOfMonth(m);
+    const weeks: string[][] = [];
+    let wd = gridStart;
+    while (wd <= lastDay) {
+      const wk: string[] = [];
+      for (let k = 0; k < 7; k++) { wk.push(format(wd, 'yyyy-MM-dd')); wd = addDays(wd, 1); }
+      weeks.push(wk);
+    }
+    const cw = (CX1 - CX0) / 7;
+    // 요일 머리
+    ['일', '월', '화', '수', '목', '금', '토'].forEach((w, i) => {
+      fill(C.soft); stroke(C.border); pdf.setLineWidth(0.8);
+      pdf.rect(CX0 + i * cw, gridTop - 24, cw, 24, 'FD');
+      font(11, true); color(i === 0 ? C.sun : i === 6 ? C.sat : C.muted);
+      txt(w, CX0 + i * cw + cw / 2, gridTop - 8, { align: 'center' });
+    });
+    const ch = (gridBottom - gridTop) / weeks.length;
+    weeks.forEach((week, wi) => {
+      const y = gridTop + wi * ch;
+      // 이번 주 출장 띠 줄 계산
+      const ws = week[0], we = week[6];
+      const laneEnds: number[] = [];
+      const segs = trips.filter(t => t.startDate <= we && (t.endDate || t.startDate) >= ws).map(t => {
+        const end = t.endDate || t.startDate;
+        const sc = t.startDate < ws ? 0 : Math.max(0, week.indexOf(t.startDate));
+        const ec = end > we ? 6 : Math.max(sc, week.indexOf(end));
+        let lane = laneEnds.findIndex(e => e < sc);
+        if (lane === -1) { lane = laneEnds.length; laneEnds.push(ec); } else laneEnds[lane] = ec;
+        return { t, sc, ec, lane, contL: t.startDate < ws };
+      });
+      const laneCount = Math.min(laneEnds.length, 3);
+      // 칸
+      week.forEach((d, di) => {
+        const x = CX0 + di * cw;
+        const inMonth = d.slice(0, 7) === mStr;
+        const dow = di;
+        const hol = input.holidays[d];
+        fill(inMonth ? C.white : C.soft); stroke(C.border); pdf.setLineWidth(0.8);
+        pdf.rect(x, y, cw, ch, 'FD');
+        const dayNum = String(Number(d.slice(8)));
+        if (d === today) { fill(C.accent); pdf.circle(x + 16, y + 15, 10, 'F'); }
+        font(13, true);
+        color(d === today ? C.white : !inMonth ? C.light : (hol || dow === 0) ? C.sun : dow === 6 ? C.sat : C.text);
+        txt(dayNum, x + 16, y + 20, { align: 'center' });
+        if (hol && inMonth) { font(8, true); color(C.sun); txt(fit(hol, cw - 42), x + 30, y + 19); }
+        if (input.dayNotes[d] && inMonth) { fill(C.amber); pdf.roundedRect(x + cw - 30, y + 8, 22, 12, 3, 3, 'F'); font(7, true); color(C.white); txt('메모', x + cw - 19, y + 17, { align: 'center' }); }
+        // 할 일
+        if (inMonth) {
+          const items = todoByDate[d] || [];
+          const startY = y + 30 + laneCount * 15 + 6;
+          const maxLines = Math.max(0, Math.floor((y + ch - 16 - startY) / 12));
+          items.slice(0, maxLines).forEach((t, k) => {
+            const ly = startY + k * 12;
+            const done = t.status === 'done';
+            stroke(done ? C.light : t.category === 'official' ? C.red : C.muted); pdf.setLineWidth(0.7);
+            pdf.rect(x + 6, ly - 6, 6, 6, 'S');
+            font(8, false); color(done ? C.light : t.category === 'official' ? C.red : C.text);
+            const label = fit(t.title, cw - 22);
+            txt(label, x + 16, ly);
+            if (done) { stroke(C.light); pdf.line(x + 16, ly - 3, x + 16 + pdf.getTextWidth(label), ly - 3); }
+          });
+          const more = items.length - Math.min(items.length, maxLines);
+          const classes = (schedByDate[d] || []).length;
+          font(7.5, false); color(C.muted);
+          if (more > 0) txt(`+${more}`, x + 6, y + ch - 6);
+          if (classes > 0) txt(`수업 ${classes}`, x + cw - 6, y + ch - 6, { align: 'right' });
+          const p = dayPage(d);
+          if (p) pdf.link(x, y, cw, ch, { pageNumber: p });
+        }
+      });
+      // 출장 띠
+      segs.filter(s => s.lane < 3).forEach(s => {
+        const bx = CX0 + s.sc * cw + (s.contL ? 0 : 3);
+        const bw = (s.ec - s.sc + 1) * cw - (s.contL ? 0 : 3) - 3;
+        const by = y + 26 + s.lane * 15;
+        const c = tripRgb(s.t); fill(c);
+        pdf.roundedRect(bx, by, bw, 12, 3, 3, 'F');
+        font(7.5, true); color(C.white);
+        txt(fit(`${s.contL ? '… ' : ''}${s.t.title}${s.t.assigneeName ? ' · ' + s.t.assigneeName : ''}`, bw - 8), bx + 4, by + 9);
+        const p = dayPage(s.t.startDate < ws ? ws : s.t.startDate);
+        if (p) pdf.link(bx, by, bw, 12, { pageNumber: p });
+      });
+    });
+  });
+
+  // ---------- 3. 일간 페이지 ----------
+  const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
+  days.forEach((d, i) => {
+    if (i % 30 === 0) onProgress?.(`페이지 만드는 중… ${Math.round(i / days.length * 100)}%`);
+    pdf.setPage(dayPage(d)!);
+    const mi = monthIdxOf(d);
+    drawTabs(mi);
+    const date = parseISO(d);
+    const dow = date.getDay();
+    const hol = input.holidays[d];
+    // 머리
+    font(26, true); color(hol || dow === 0 ? C.sun : dow === 6 ? C.sat : C.accent);
+    const title = `${date.getMonth() + 1}월 ${date.getDate()}일 ${WEEKDAY[dow]}요일`;
+    txt(title, CX0, 56);
+    font(11, false); color(hol ? C.sun : C.muted);
+    txt(`${getYear(date)}년${hol ? '  ·  ' + hol : ''}`, CX0 + 2, 77);
+    // 이동 버튼
+    const prev = i > 0 ? days[i - 1] : null, next = i < days.length - 1 ? days[i + 1] : null;
+    let bx = CX1 - 96;
+    navButton('앱에서 열기', bx, 30, 96, { url: `${input.appUrl}?date=${d}` }, true);
+    bx -= 76; navButton(`${date.getMonth() + 1}월 월간`, bx, 30, 70, { pageNumber: monthPage(mi) });
+    bx -= 70; navButton('다음 ▶', bx, 30, 64, next ? { pageNumber: dayPage(next)! } : null);
+    bx -= 70; navButton('◀ 이전', bx, 30, 64, prev ? { pageNumber: dayPage(prev)! } : null);
+    stroke(C.border); pdf.setLineWidth(1); pdf.line(CX0, 88, CX1, 88);
+
+    // 왼쪽: 앱 데이터
+    const LX0 = CX0, LX1 = CX0 + 430;
+    let y = 114;
+    const bottom = H - 30;
+    const section = (label: string, count: number) => {
+      font(12, true); color(C.accent); txt(`${label}${count ? `  ${count}` : ''}`, LX0, y);
+      stroke(C.line); pdf.setLineWidth(0.8); pdf.line(LX0, y + 6, LX1, y + 6);
+      y += 24;
+    };
+    const none = () => { font(10, false); color(C.light); txt('없음', LX0 + 4, y); y += 20; };
+    const room = (need: number) => y + need <= bottom;
+    let clipped = false;
+
+    const scs = schedByDate[d] || [];
+    section('수업 · 일정', scs.length);
+    if (!scs.length) none();
+    scs.forEach(s => {
+      if (!room(30)) { clipped = true; return; }
+      font(11, true); color(C.text);
+      txt(`${s.startTime}~${s.endTime}`, LX0 + 4, y);
+      txt(fit(s.program, LX1 - LX0 - 92), LX0 + 88, y);
+      font(9, false); color(C.muted);
+      txt(fit([s.location, s.target, s.teacherName].filter(Boolean).join(' · '), LX1 - LX0 - 92), LX0 + 88, y + 13);
+      y += 30;
+    });
+    y += 6;
+
+    const tps = tripsOn(d);
+    if (tps.length) {
+      section('출장', tps.length);
+      tps.forEach(t => {
+        if (!room(30)) { clipped = true; return; }
+        const c = tripRgb(t); fill(c); pdf.roundedRect(LX0 + 4, y - 9, 6, 22, 2, 2, 'F');
+        font(11, true); color(C.text); txt(fit(t.title, LX1 - LX0 - 24), LX0 + 18, y);
+        font(9, false); color(C.muted);
+        txt(fit([`${t.startDate.slice(5).replace('-', '/')}~${t.endDate.slice(5).replace('-', '/')}`, t.assigneeName, t.place].filter(Boolean).join(' · '), LX1 - LX0 - 24), LX0 + 18, y + 13);
+        y += 30;
+      });
+      y += 6;
+    }
+
+    const tds = todoByDate[d] || [];
+    section('마감 할 일', tds.length);
+    if (!tds.length) none();
+    tds.forEach(t => {
+      if (!room(26)) { clipped = true; return; }
+      const done = t.status === 'done';
+      const official = t.category === 'official';
+      stroke(official ? C.red : C.muted); pdf.setLineWidth(1);
+      pdf.rect(LX0 + 4, y - 9, 11, 11, 'S');
+      if (done) { stroke(C.green); pdf.setLineWidth(1.6); pdf.line(LX0 + 6, y - 4, LX0 + 9, y - 1); pdf.line(LX0 + 9, y - 1, LX0 + 14, y - 8); }
+      font(11, !done); color(done ? C.light : official ? C.red : C.text);
+      const label = fit(`${official ? '[공문] ' : ''}${t.title}`, LX1 - LX0 - 30);
+      txt(label, LX0 + 24, y);
+      if (done) { stroke(C.light); pdf.setLineWidth(0.8); pdf.line(LX0 + 24, y - 4, LX0 + 24 + pdf.getTextWidth(label), y - 4); }
+      const meta = [t.assigneeName, t.docNo ? `번호 ${t.docNo}` : '', t.docTo ? `→ ${t.docTo}` : '', (t.checklist || []).length ? `체크 ${(t.checklist || []).filter(c => c.done).length}/${(t.checklist || []).length}` : ''].filter(Boolean).join(' · ');
+      if (meta) { font(8.5, false); color(C.muted); txt(fit(meta, LX1 - LX0 - 30), LX0 + 24, y + 12); y += 26; } else y += 20;
+    });
+    y += 6;
+
+    const memo = input.dayNotes[d]?.content;
+    if (memo && room(50)) {
+      section('날짜 메모', 0);
+      font(10, false); color(C.text);
+      const lines: string[] = pdf.splitTextToSize(memo, LX1 - LX0 - 8);
+      for (const ln of lines) {
+        if (!room(16)) { clipped = true; break; }
+        txt(ln, LX0 + 4, y); y += 15;
+      }
+      y += 6;
+    }
+    if (clipped) {
+      font(9, true); color(C.accent);
+      txt('… 더 있어요 · 앱에서 보기', LX0 + 4, bottom + 14);
+      pdf.link(LX0, bottom, 180, 18, { url: `${input.appUrl}?date=${d}` });
+    }
+    // 왼쪽 아래 남은 공간: 손글씨용 줄
+    if (!clipped && y < bottom - 40) {
+      font(12, true); color(C.accent); txt('할 일 · 메모', LX0, y + 10);
+      stroke(C.line); pdf.setLineWidth(0.8);
+      for (let ly = y + 40; ly <= bottom; ly += 28) pdf.line(LX0, ly, LX1, ly);
+    }
+
+    // 오른쪽: 필기 공간
+    const RX0 = LX1 + 28, RX1 = CX1;
+    stroke(C.border); pdf.setLineWidth(0.8); pdf.line(RX0 - 14, 104, RX0 - 14, bottom + 10);
+    font(12, true); color(C.accent); txt('노트', RX0, 114);
+    stroke(C.line); pdf.setLineWidth(0.8);
+    for (let ly = 144; ly <= bottom + 10; ly += 28) pdf.line(RX0, ly, RX1, ly);
+  });
+
+  onProgress?.('파일로 저장하는 중…');
+  await new Promise(r => setTimeout(r, 30));
+  const blob: Blob = pdf.output('blob');
+  return { blob, pages: totalPages };
+}
+
+let usedDeepLinkDate = false;
+
+function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedules, alertsOpenReq, initialDate, appName }: { teachers: Teacher[]; authorName: string; koreanHolidays: Record<string, string>; weatherDaily: Record<string, { max: number; min: number; code: number }>; schedules: Schedule[]; alertsOpenReq: number; initialDate?: string | null; appName: string }) {
   const [subTab, setSubTab] = useState<'board' | 'calendar' | 'notes' | 'history'>('board');
   const [boardView, setBoardView] = useState<'kanban' | 'list'>('kanban');
   const [quickFilter, setQuickFilter] = useState<'none' | 'today' | 'overdue' | 'official'>('none');
@@ -2911,6 +3358,17 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   // ---------- 캘린더 ----------
   const [calBaseDate, setCalBaseDate] = useState(startOfToday());
   const [calSelectedDate, setCalSelectedDate] = useState<string | null>(null);
+  // 굿노트 PDF의 "앱에서 열기" 링크(?date=yyyy-MM-dd)로 들어오면 그 날짜를 바로 보여줌
+  useEffect(() => {
+    if (!initialDate || usedDeepLinkDate) return;
+    usedDeepLinkDate = true;
+    const d = parseISO(initialDate);
+    if (!isValid(d)) return;
+    setSubTab('calendar');
+    setCalBaseDate(d);
+    setCalSelectedDate(initialDate);
+    setTimeout(() => document.getElementById('cal-selected-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
+  }, [initialDate]); // eslint-disable-line react-hooks/exhaustive-deps
   const calDays = useMemo(() => {
     try {
       const monthStart = startOfMonth(calBaseDate);
@@ -3276,6 +3734,54 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
     };
   }, [searchText, todos, trips, dayNotes, notes]);
   const searchCount = searchResults ? searchResults.todos.length + searchResults.trips.length + searchResults.memos.length + searchResults.notes.length : 0;
+
+  // ---------- 굿노트용 PDF 플래너 ----------
+  const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+  const [plannerStart, setPlannerStart] = useState(() => format(subMonths(startOfToday(), 3), 'yyyy-MM'));
+  const [plannerEnd, setPlannerEnd] = useState(() => `${getYear(startOfToday())}-12`);
+  const [plannerBusy, setPlannerBusy] = useState('');
+  const [plannerFile, setPlannerFile] = useState<{ blob: Blob; name: string; pages: number } | null>(null);
+  const plannerMonthCount = (() => {
+    const [sy, sm] = plannerStart.split('-').map(Number); const [ey, em] = plannerEnd.split('-').map(Number);
+    return (ey - sy) * 12 + (em - sm) + 1;
+  })();
+  const makePlanner = async () => {
+    if (!plannerStart || !plannerEnd || plannerMonthCount < 1) { alert('시작 월과 끝 월을 확인해주세요.'); return; }
+    if (plannerMonthCount > 12) { alert('한 번에 최대 12개월까지 만들 수 있어요.'); return; }
+    setPlannerFile(null);
+    try {
+      const appUrl = window.location.origin + window.location.pathname;
+      const { blob, pages } = await buildPlannerPdf({
+        appName: appName || '업무수첩', appUrl, startMonth: plannerStart, endMonth: plannerEnd,
+        scopeLabel: myFilterOn ? `${myTeacherName} 선생님` : '전체 업무',
+        schedules: myFilterOn ? schedules.filter(s => s.teacherId === myTeacherId) : schedules,
+        todos: visibleTodos, trips: visibleTrips, dayNotes, holidays: koreanHolidays,
+      }, (msg) => setPlannerBusy(msg));
+      const name = `업무수첩-플래너-${plannerStart.replace('-', '')}-${plannerEnd.replace('-', '')}.pdf`;
+      setPlannerFile({ blob, name, pages });
+      logActivity({ targetType: 'todo', targetId: 'planner-export', title: '굿노트 플래너 만들기', action: `${plannerStart} ~ ${plannerEnd} (${pages}쪽)`, by: authorName });
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.message || 'PDF를 만들지 못했습니다.');
+    } finally { setPlannerBusy(''); }
+  };
+  const canSharePlanner = (() => {
+    try { return !!plannerFile && typeof navigator.canShare === 'function' && navigator.canShare({ files: [new File([plannerFile.blob], plannerFile.name, { type: 'application/pdf' })] }); } catch { return false; }
+  })();
+  const sharePlanner = async () => {
+    if (!plannerFile) return;
+    try {
+      await navigator.share({ files: [new File([plannerFile.blob], plannerFile.name, { type: 'application/pdf' })], title: plannerFile.name });
+    } catch (err: any) { if (err?.name !== 'AbortError') { console.warn(err); savePlanner(); } }
+  };
+  const savePlanner = () => {
+    if (!plannerFile) return;
+    const url = URL.createObjectURL(plannerFile.blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = plannerFile.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
 
   // ---------- 휴대폰 캘린더로 내보내기 (.ics) ----------
   const [isIcsOpen, setIsIcsOpen] = useState(false);
@@ -3898,10 +4404,13 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                 </div>
               </div>
               <div className="grid grid-cols-2 lg:flex gap-2 shrink-0">
-                <button onClick={() => { setIsIcsOpen(v => !v); setIsTripFormOpen(false); }} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap", isIcsOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
+                <button onClick={() => { setIsPlannerOpen(v => !v); setIsIcsOpen(false); setIsTripFormOpen(false); }} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap col-span-2 lg:col-span-1", isPlannerOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
+                  <FileText size={14} /> 굿노트 플래너
+                </button>
+                <button onClick={() => { setIsIcsOpen(v => !v); setIsTripFormOpen(false); setIsPlannerOpen(false); }} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap", isIcsOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
                   <CalendarIcon size={14} /> 폰 캘린더로
                 </button>
-                <button onClick={() => { setIsTripFormOpen(v => !v); setIsIcsOpen(false); }} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap", isTripFormOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
+                <button onClick={() => { setIsTripFormOpen(v => !v); setIsIcsOpen(false); setIsPlannerOpen(false); }} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap", isTripFormOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
                   <Plane size={14} /> 출장 등록
                 </button>
                 <button onClick={printWeeklyExport} className="h-9 px-3 lg:px-4 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap">
@@ -3912,6 +4421,39 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                 </button>
               </div>
             </div>
+
+            {isPlannerOpen && (
+              <div className="mb-5 p-4 bg-bg-primary border border-border-color rounded-xl space-y-3">
+                <h4 className="text-xs font-bold text-text-main flex items-center gap-1.5"><FileText size={13} /> 굿노트용 PDF 플래너 <span className="font-normal text-text-muted">· 탭·날짜를 누르면 페이지가 이동하는 하이퍼링크 PDF</span></h4>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="month" value={plannerStart} onChange={(e) => { setPlannerStart(e.target.value); setPlannerFile(null); }} className="h-9 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+                  <span className="text-xs text-text-muted">~</span>
+                  <input type="month" value={plannerEnd} min={plannerStart} onChange={(e) => { setPlannerEnd(e.target.value); setPlannerFile(null); }} className="h-9 px-3 bg-surface border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+                  <span className={cn("text-[11px] font-bold", plannerMonthCount > 12 || plannerMonthCount < 1 ? "text-red-500" : "text-text-muted")}>{plannerMonthCount > 0 ? `${plannerMonthCount}개월` : '기간 확인'}{plannerMonthCount > 12 ? ' (최대 12개월)' : ''}</span>
+                </div>
+                <ul className="text-[11px] text-text-muted leading-relaxed list-disc pl-4 space-y-0.5">
+                  <li><b className="text-text-main">표지</b>: 월 바로가기 · 출장 목록 → <b className="text-text-main">월간</b>: 출장 띠·할 일·메모 표시, 날짜를 누르면 → <b className="text-text-main">일간</b>: 수업·출장·마감 할 일·메모 + 필기 공간</li>
+                  <li>모든 페이지 오른쪽에 월 탭, 일간 페이지에 이전/다음/월간/<b className="text-text-main">앱에서 열기</b>(그 날짜로 바로 이동) 버튼</li>
+                  <li>{myFilterOn ? `"내 업무만 보기"가 켜져 있어 ${myTeacherName} 선생님 업무만 담겨요.` : '전체 업무가 담겨요. (위의 "내 업무만 보기"를 켜면 내 업무만)'} 만든 시점의 내용이 들어가요.</li>
+                </ul>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={makePlanner} disabled={!!plannerBusy} className="h-10 px-5 bg-accent-color text-on-accent rounded-lg text-sm font-bold flex items-center gap-1.5 justify-center disabled:opacity-60">
+                    <FileText size={15} /> {plannerBusy ? '만드는 중…' : plannerFile ? '다시 만들기' : 'PDF 만들기'}
+                  </button>
+                  {plannerBusy && <span className="text-[11px] text-text-muted">{plannerBusy}</span>}
+                </div>
+                {plannerFile && (
+                  <div className="p-3 rounded-xl bg-surface border border-green-500/40 space-y-2">
+                    <p className="text-xs font-bold text-text-main">✅ 완성! {plannerFile.name} · {plannerFile.pages}쪽 · {(plannerFile.blob.size / 1048576).toFixed(1)}MB</p>
+                    <div className="flex flex-wrap gap-2">
+                      {canSharePlanner && <button onClick={sharePlanner} className="h-10 px-4 bg-accent-color text-on-accent rounded-lg text-sm font-bold">굿노트로 보내기 (공유)</button>}
+                      <button onClick={savePlanner} className="h-10 px-4 bg-bg-primary border border-border-color rounded-lg text-sm font-bold hover:border-accent-color">PDF 파일 저장</button>
+                    </div>
+                    <p className="text-[10px] text-text-muted leading-relaxed">📱 아이패드: <b>"굿노트로 보내기"</b> → 공유 메뉴에서 <b>GoodNotes</b> 선택 → "새 문서로 가져오기". 저장한 파일은 파일 앱에서 길게 눌러 공유 → GoodNotes로 열어도 돼요. 새로 만든 PDF는 새 노트가 되니, 기존 노트의 필기는 그대로 남아요.</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {isIcsOpen && (
               <div className="mb-5 p-4 bg-bg-primary border border-border-color rounded-xl space-y-3">
@@ -4177,7 +4719,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
           })()}
 
           {calSelectedDate && (
-            <div className="bg-surface rounded-2xl border border-amber-200 p-5 shadow-sm space-y-4">
+            <div id="cal-selected-panel" className="bg-surface rounded-2xl border border-amber-200 p-5 shadow-sm space-y-4 scroll-mt-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-text-main">{format(parseISO(calSelectedDate), 'M월 d일 (EEE)', { locale: ko })}</h3>
                 <div className="flex items-center gap-1">
