@@ -557,7 +557,7 @@ export default function App() {
       const monthStart = startOfMonth(baseDate);
       if (!isValid(monthStart)) return [];
       
-      const startOfGrid = startOfWeek(monthStart, { weekStartsOn: 1 });
+      const startOfGrid = startOfWeek(monthStart, { weekStartsOn: 0 });
       if (!isValid(startOfGrid)) return [];
 
       return Array.from({ length: 42 }).map((_, i) => addDays(startOfGrid, i));
@@ -1105,7 +1105,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.8.0</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.8.1</p>
             </div>
             
             <div className="space-y-3">
@@ -1478,7 +1478,7 @@ export default function App() {
                 ) : (
                   <div className="bg-surface rounded-2xl border border-border-color overflow-x-auto lg:overflow-hidden shadow-sm min-h-[700px] flex flex-col">
                     <div className="grid grid-cols-7 min-w-[700px] lg:min-w-0 border-b border-border-color bg-soft">
-                      {['월', '화', '수', '목', '금', '토', '일'].map(d => (
+                      {['일', '월', '화', '수', '목', '금', '토'].map(d => (
                         <div key={d} className={cn("py-3 text-center text-[10px] font-bold uppercase tracking-widest", d === '일' ? "text-sun" : d === '토' ? "text-sat" : "text-text-muted")}>{d}</div>
                       ))}
                     </div>
@@ -2296,7 +2296,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
     try {
       const monthStart = startOfMonth(calBaseDate);
       if (!isValid(monthStart)) return [];
-      const startOfGrid = startOfWeek(monthStart, { weekStartsOn: 1 });
+      const startOfGrid = startOfWeek(monthStart, { weekStartsOn: 0 });
       if (!isValid(startOfGrid)) return [];
       return Array.from({ length: 42 }).map((_, i) => addDays(startOfGrid, i));
     } catch { return []; }
@@ -2460,8 +2460,8 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
 
   // 이번 주 할 일 인쇄/내보내기
   const printWeeklyExport = () => {
-    const weekStart = startOfWeek(startOfToday(), { weekStartsOn: 1 });
-    const weekEnd = endOfWeek(startOfToday(), { weekStartsOn: 1 });
+    const weekStart = startOfWeek(startOfToday(), { weekStartsOn: 0 });
+    const weekEnd = endOfWeek(startOfToday(), { weekStartsOn: 0 });
     const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
     const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const rows = weekDays.map(d => {
@@ -2763,7 +2763,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
 
             <div className="rounded-xl overflow-hidden border border-border-color">
               <div className="grid grid-cols-7">
-                {['월', '화', '수', '목', '금', '토', '일'].map(d => (
+                {['일', '월', '화', '수', '목', '금', '토'].map(d => (
                   <div key={d} className={cn("text-center text-xs font-bold uppercase py-2 sm:py-3 bg-bg-primary border-b border-border-color", d === '일' ? "text-sun" : d === '토' ? "text-sat" : "text-text-muted")}>{d}</div>
                 ))}
               </div>
