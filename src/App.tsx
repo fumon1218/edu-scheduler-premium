@@ -29,7 +29,12 @@ import {
   Printer,
   Menu,
   Plane,
-  StickyNote
+  StickyNote,
+  History,
+  Layers,
+  FileText,
+  MessageSquare,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   collection, 
@@ -551,6 +556,12 @@ export default function App() {
       }));
     }
   }, [programs, locations, targets, editingId]);
+
+  // 업무 관리 알림 (상단 종 · 메뉴 배지)
+  const [myTeacherIdApp] = useMyTeacherId(teachers, user?.displayName || '관리자');
+  const taskAlerts = useTaskAlerts(myTeacherIdApp, user?.displayName || '관리자', !!user);
+  const [alertsOpenReq, setAlertsOpenReq] = useState(0);
+  const openTaskAlerts = () => { setViewMode('tasks'); setAlertsOpenReq(n => n + 1); };
 
   const calendarDays = useMemo(() => {
     try {
@@ -1097,7 +1108,7 @@ export default function App() {
           <div onClick={() => { setViewMode('list'); setSelectedDay(null); }} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'list' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><LayoutList size={18} /><span>리스트 보기</span></div>
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
-          <div onClick={() => setViewMode('tasks')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'tasks' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><ListChecks size={18} /><span>업무 관리</span></div>
+          <div onClick={() => setViewMode('tasks')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'tasks' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><ListChecks size={18} /><span>업무 관리</span>{taskAlerts.unreadCount > 0 && <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">{taskAlerts.unreadCount}</span>}</div>
           <div onClick={openSettings} className={cn("px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span></div>
           <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><Link2 size={18} /><span>강릉 방문예약</span><span className={cn("ml-auto w-2 h-2 rounded-full", gnStatus === 'ok' ? "bg-green-500" : gnStatus === 'error' ? "bg-red-500" : "bg-gray-300")} /></a>
           <a href={CHURCH_CALENDAR_URL} target="_blank" rel="noopener noreferrer" title="교회 캘린더 앱 열기 (새 창)" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><CalendarIcon size={18} /><span>교회 캘린더</span><ExternalLink size={13} className="ml-auto opacity-50" /></a>
@@ -1105,7 +1116,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.8.1</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.9.0</p>
             </div>
             
             <div className="space-y-3">
@@ -1192,9 +1203,11 @@ export default function App() {
           <div className="flex items-center gap-0.5 shrink-0">
             <button onClick={toggleTheme} aria-label="라이트/다크 모드 전환" className="p-2 text-text-muted hover:text-accent-color transition-colors">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
             <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="p-2 text-text-muted hover:text-accent-color transition-colors"><Link2 size={20} /></a>
-            <button onClick={scrollToNotifications} className="p-2 text-text-muted hover:text-accent-color transition-colors relative">
+            <button onClick={() => taskAlerts.unreadCount > 0 ? openTaskAlerts() : scrollToNotifications()} className="p-2 text-text-muted hover:text-accent-color transition-colors relative" title={taskAlerts.unreadCount > 0 ? `새 업무 알림 ${taskAlerts.unreadCount}건` : '알림'}>
               <Bell size={20} />
-              <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" />
+              {taskAlerts.unreadCount > 0
+                ? <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">{taskAlerts.unreadCount > 9 ? '9+' : taskAlerts.unreadCount}</span>
+                : <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" />}
             </button>
             <div 
               onClick={() => { if (viewMode === 'tasks') setViewMode('list'); setIsSettingsOpen(true); }}
@@ -1218,7 +1231,7 @@ export default function App() {
             </div>
           </div>
           <div className="hidden lg:flex items-center gap-4">
-            <div className="relative w-10 h-10 bg-bg-primary rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"><Bell size={18} className="text-text-main" /><span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" /></div>
+            <div onClick={() => taskAlerts.unreadCount > 0 || viewMode === 'tasks' ? openTaskAlerts() : scrollToNotifications()} title={taskAlerts.unreadCount > 0 ? `새 업무 알림 ${taskAlerts.unreadCount}건` : '알림'} className="relative w-10 h-10 bg-bg-primary rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"><Bell size={18} className="text-text-main" />{taskAlerts.unreadCount > 0 ? <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-surface">{taskAlerts.unreadCount > 9 ? '9+' : taskAlerts.unreadCount}</span> : <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" />}</div>
             <div className="flex items-center gap-3">
               {user && (
                 <div className="flex items-center gap-3">
@@ -2071,7 +2084,7 @@ export default function App() {
             </div>
           </div>
         </div>)}
-          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} koreanHolidays={koreanHolidays} weatherDaily={weatherDaily} schedules={schedules} />}
+          {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} koreanHolidays={koreanHolidays} weatherDaily={weatherDaily} schedules={schedules} alertsOpenReq={alertsOpenReq} />}
       </div>
 
         {/* Mobile Bottom Navigation Bar */}
@@ -2099,8 +2112,9 @@ export default function App() {
             </button>
           </div>
           
-          <button onClick={() => setViewMode('tasks')} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'tasks' ? "text-accent-color" : "text-text-muted")}>
+          <button onClick={() => setViewMode('tasks')} className={cn("relative flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'tasks' ? "text-accent-color" : "text-text-muted")}>
             <ListChecks size={20} strokeWidth={2.5} />
+            {taskAlerts.unreadCount > 0 && <span className="absolute -top-1 left-1/2 ml-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">{taskAlerts.unreadCount > 9 ? '9+' : taskAlerts.unreadCount}</span>}
             <span className="text-[10px] font-bold">업무</span>
           </button>
           <button onClick={() => setViewMode('teacher')} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'teacher' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
@@ -2120,19 +2134,32 @@ export default function App() {
 
 // --- Components ---
 
+// =====================================================================
+// 업무 관리 (업무 수첩)
+// =====================================================================
+interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
 interface Todo {
   id: string;
   title: string;
   status: 'todo' | 'doing' | 'done';
   category?: string;
   tags?: string[];
-  assigneeId?: string;
-  assigneeName?: string;
-  dueDate?: string;
+  assigneeId?: string | null;
+  assigneeName?: string | null;
+  dueDate?: string | null;
   note?: string;
   seriesId?: string;
-  linkedScheduleId?: string;
-  linkedScheduleLabel?: string;
+  linkedScheduleId?: string | null;
+  linkedScheduleLabel?: string | null;
+  linkedTripId?: string | null;
+  checklist?: ChecklistItem[];
+  docNo?: string | null;
+  docTo?: string | null;
+  createdBy?: string;
   createdAt: any;
 }
 interface HandoffNote {
@@ -2142,7 +2169,6 @@ interface HandoffNote {
   authorName: string;
   createdAt: any;
 }
-
 // 날짜별 메모 (업무 관리 캘린더에서 날짜 칸을 두 번 눌러 작성)
 interface DayNote {
   id: string;
@@ -2161,8 +2187,56 @@ interface Trip {
   assigneeId?: string | null;
   assigneeName?: string | null;
   authorName?: string;
+  result?: string;
   createdAt?: any;
 }
+// 할 일 댓글
+interface TodoComment {
+  id: string;
+  todoId: string;
+  text: string;
+  authorName: string;
+  createdAt: any;
+}
+// 업무 템플릿 (반복되는 할 일 묶음)
+interface TemplateItem {
+  title: string;
+  offset: number;
+  category: string;
+}
+interface TodoTemplate {
+  id: string;
+  name: string;
+  items: TemplateItem[];
+  createdAt?: any;
+}
+// 변경 기록
+interface ActivityLog {
+  id: string;
+  targetType: 'todo' | 'trip' | 'memo' | 'note' | 'template';
+  targetId: string;
+  title: string;
+  action: string;
+  by: string;
+  at: any;
+}
+
+const TODO_STATUSES: { id: Todo['status']; label: string }[] = [
+  { id: 'todo', label: '할 일' },
+  { id: 'doing', label: '진행 중' },
+  { id: 'done', label: '완료' },
+];
+
+const TODO_CATEGORIES: { id: string; label: string; dot: string; bg: string; text: string; border: string }[] = [
+  { id: 'prep',     label: '수업준비',   dot: 'bg-blue-500',   bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200' },
+  { id: 'admin',    label: '행정',       dot: 'bg-green-500',  bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
+  { id: 'official', label: '공문',       dot: 'bg-red-500',    bg: 'bg-red-50',    text: 'text-red-500',    border: 'border-red-100' },
+  { id: 'facility', label: '시설/비품',  dot: 'bg-amber-500',  bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
+  { id: 'counsel',  label: '상담',       dot: 'bg-yellow-500', bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
+  { id: 'etc',      label: '기타',       dot: 'bg-gray-400',   bg: 'bg-gray-50',   text: 'text-gray-600',   border: 'border-gray-200' },
+];
+const todoCategoryOf = (id?: string) => TODO_CATEGORIES.find(c => c.id === (id || 'etc')) || TODO_CATEGORIES[TODO_CATEGORIES.length - 1];
+
 const TRIP_COLORS = [
   'bg-[#344B68] text-white',
   'bg-[#3E7C74] text-white',
@@ -2177,25 +2251,149 @@ const tripColorOf = (t: Trip) => {
   return TRIP_COLORS[h % TRIP_COLORS.length];
 };
 
-const TODO_STATUSES: { id: Todo['status']; label: string }[] = [
-  { id: 'todo', label: '할 일' },
-  { id: 'doing', label: '진행 중' },
-  { id: 'done', label: '완료' },
-];
+const LOG_TYPE_LABEL: Record<ActivityLog['targetType'], string> = { todo: '할 일', trip: '출장', memo: '날짜 메모', note: '업무 메모', template: '템플릿' };
 
-const TODO_CATEGORIES: { id: string; label: string; dot: string; bg: string; text: string; border: string }[] = [
-  { id: 'prep',     label: '수업준비',   dot: 'bg-blue-500',   bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200' },
-  { id: 'admin',    label: '행정',       dot: 'bg-green-500',  bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
-  { id: 'facility', label: '시설/비품',  dot: 'bg-amber-500',  bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
-  { id: 'counsel',  label: '상담',       dot: 'bg-yellow-500', bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
-  { id: 'etc',      label: '기타',       dot: 'bg-gray-400',   bg: 'bg-gray-50',   text: 'text-gray-600',   border: 'border-gray-200' },
-];
-const todoCategoryOf = (id?: string) => TODO_CATEGORIES.find(c => c.id === (id || 'etc')) || TODO_CATEGORIES[TODO_CATEGORIES.length - 1];
+// ---------- 작은 도우미 함수들 ----------
+const tsMillis = (v: any): number => (v && typeof v.toMillis === 'function') ? v.toMillis() : (typeof v === 'number' ? v : 0);
+const newLocalId = () => Math.random().toString(36).slice(2, 10);
+// 마감일까지 남은 날 (오늘=0, 내일=1, 어제=-1)
+const daysUntil = (due?: string | null): number | null => {
+  if (!due) return null;
+  try {
+    const d = parseISO(due);
+    if (!isValid(d)) return null;
+    return Math.round((d.getTime() - startOfToday().getTime()) / 86400000);
+  } catch { return null; }
+};
+const ddayLabel = (n: number) => n === 0 ? 'D-day' : n > 0 ? `D-${n}` : `D+${-n}`;
+const escHtml = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const logActivity = async (entry: Omit<ActivityLog, 'id' | 'at'>) => {
+  try { await addDoc(collection(db, 'activityLog'), { ...entry, at: Timestamp.now() }); }
+  catch (err) { console.warn('activity log failed', err); }
+};
 
-function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedules }: { teachers: Teacher[]; authorName: string; koreanHolidays: Record<string, string>; weatherDaily: Record<string, { max: number; min: number; code: number }>; schedules: Schedule[] }) {
-  const [subTab, setSubTab] = useState<'board' | 'calendar' | 'notes'>('board');
+// ---------- "나는 어떤 선생님인가" (이 기기에 저장) ----------
+const MY_TEACHER_KEY = 'eduMyTeacherIdV1';
+const ALERT_SEEN_KEY = 'eduTaskAlertSeenV1';
+
+function useMyTeacherId(teachers: Teacher[], myName: string): [string, (id: string) => void] {
+  const read = () => { try { return localStorage.getItem(MY_TEACHER_KEY) || ''; } catch { return ''; } };
+  const [id, setIdState] = useState<string>(read);
+  const setId = (v: string) => {
+    try { localStorage.setItem(MY_TEACHER_KEY, v); } catch { /* ignore */ }
+    setIdState(v);
+    window.dispatchEvent(new Event('edu-my-teacher'));
+  };
+  useEffect(() => {
+    const h = () => setIdState(read());
+    window.addEventListener('edu-my-teacher', h);
+    return () => window.removeEventListener('edu-my-teacher', h);
+  }, []);
+  // 처음에는 로그인 이름과 같은 교사를 자동으로 찾아 둡니다.
+  useEffect(() => {
+    if (id || teachers.length === 0 || !myName) return;
+    const match = teachers.find(t => t.name === myName) || teachers.find(t => myName.includes(t.name) || t.name.includes(myName));
+    if (match) setId(match.id);
+  }, [teachers, myName, id]);
+  return [id, setId];
+}
+
+let lastHandledAlertsReq = 0;
+
+interface TaskAlert {
+  id: string;
+  kind: 'assign' | 'comment';
+  todoId: string;
+  text: string;
+  sub: string;
+  at: number;
+  unread: boolean;
+}
+
+// ---------- 담당자 알림 (새로 배정된 업무 · 내 업무에 달린 댓글) ----------
+function useTaskAlerts(myTeacherId: string, myName: string, enabled: boolean) {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [comments, setComments] = useState<TodoComment[]>([]);
+  const [seen, setSeen] = useState<number>(() => {
+    try {
+      const v = Number(localStorage.getItem(ALERT_SEEN_KEY));
+      if (v) return v;
+      const now = Date.now();
+      localStorage.setItem(ALERT_SEEN_KEY, String(now));
+      return now;
+    } catch { return Date.now(); }
+  });
+  useEffect(() => {
+    const h = () => { try { setSeen(Number(localStorage.getItem(ALERT_SEEN_KEY)) || Date.now()); } catch { /* ignore */ } };
+    window.addEventListener('edu-alert-seen', h);
+    return () => window.removeEventListener('edu-alert-seen', h);
+  }, []);
+  useEffect(() => {
+    if (!enabled) return;
+    const u1 = onSnapshot(collection(db, 'todos'), (snap) => setTodos(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Todo)), (err) => console.warn('alerts todos error', err));
+    const u2 = onSnapshot(collection(db, 'todoComments'), (snap) => setComments(snap.docs.map(d => ({ id: d.id, ...d.data() }) as TodoComment)), (err) => console.warn('todoComments error', err));
+    return () => { u1(); u2(); };
+  }, [enabled]);
+
+  const alerts = useMemo<TaskAlert[]>(() => {
+    if (!myTeacherId) return [];
+    const since = Date.now() - 30 * 86400000;
+    const mine = todos.filter(t => t.assigneeId === myTeacherId);
+    const mineById = new Map<string, Todo>(mine.map(t => [t.id, t] as [string, Todo]));
+    const list: Omit<TaskAlert, 'unread'>[] = [];
+    mine.forEach(t => {
+      const at = tsMillis(t.createdAt);
+      if (at >= since && t.createdBy !== myName) list.push({ id: 'a' + t.id, kind: 'assign', todoId: t.id, text: `새 업무 배정: ${t.title}`, sub: t.dueDate ? `마감 ${t.dueDate}` : '', at });
+    });
+    comments.forEach(c => {
+      const at = tsMillis(c.createdAt);
+      const t = mineById.get(c.todoId);
+      if (t && at >= since && c.authorName !== myName) list.push({ id: 'c' + c.id, kind: 'comment', todoId: c.todoId, text: `${c.authorName}: ${c.text}`, sub: t.title, at });
+    });
+    return list.sort((a, b) => b.at - a.at).slice(0, 30).map(a => ({ ...a, unread: a.at > seen }));
+  }, [todos, comments, myTeacherId, myName, seen]);
+
+  const unreadCount = alerts.filter(a => a.unread).length;
+  const markSeen = () => {
+    const now = Date.now();
+    try { localStorage.setItem(ALERT_SEEN_KEY, String(now)); } catch { /* ignore */ }
+    setSeen(now);
+    window.dispatchEvent(new Event('edu-alert-seen'));
+  };
+  return { alerts, unreadCount, markSeen, seen, comments };
+}
+
+function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedules, alertsOpenReq }: { teachers: Teacher[]; authorName: string; koreanHolidays: Record<string, string>; weatherDaily: Record<string, { max: number; min: number; code: number }>; schedules: Schedule[]; alertsOpenReq: number }) {
+  const [subTab, setSubTab] = useState<'board' | 'calendar' | 'notes' | 'history'>('board');
   const [boardView, setBoardView] = useState<'kanban' | 'list'>('kanban');
+  const [quickFilter, setQuickFilter] = useState<'none' | 'today' | 'overdue' | 'official'>('none');
+  const today = format(startOfToday(), 'yyyy-MM-dd');
 
+  // ---------- 나 / 내 업무만 보기 ----------
+  const [myTeacherId, setMyTeacherId] = useMyTeacherId(teachers, authorName);
+  const myTeacherName = teachers.find(t => t.id === myTeacherId)?.name || '';
+  const [myOnly, setMyOnlyState] = useState<boolean>(() => { try { return localStorage.getItem('eduTaskMyOnlyV1') === '1'; } catch { return false; } });
+  const setMyOnly = (v: boolean) => { try { localStorage.setItem('eduTaskMyOnlyV1', v ? '1' : '0'); } catch { /* ignore */ } setMyOnlyState(v); };
+  const myFilterOn = myOnly && !!myTeacherId;
+
+  // ---------- 알림 ----------
+  const { alerts, unreadCount, markSeen, seen, comments } = useTaskAlerts(myTeacherId, authorName, true);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [alertsBaseline, setAlertsBaseline] = useState(0);
+  const openAlerts = () => { setAlertsBaseline(seen); setAlertsOpen(true); markSeen(); setSearchText(''); };
+  useEffect(() => {
+    // 상단 종을 눌러 들어왔을 때 한 번만 알림 목록 열기
+    if (alertsOpenReq > lastHandledAlertsReq) { lastHandledAlertsReq = alertsOpenReq; openAlerts(); }
+  }, [alertsOpenReq]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const commentsByTodo = useMemo(() => {
+    const map: Record<string, TodoComment[]> = {};
+    comments.forEach(c => { (map[c.todoId] ||= []).push(c); });
+    Object.values(map).forEach(list => list.sort((a, b) => tsMillis(a.createdAt) - tsMillis(b.createdAt)));
+    return map;
+  }, [comments]);
+
+  // ---------- 할 일 ----------
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [newAssignee, setNewAssignee] = useState('');
@@ -2205,6 +2403,8 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   const [newRepeat, setNewRepeat] = useState<'none' | 'weekly' | 'monthly'>('none');
   const [newRepeatEndDate, setNewRepeatEndDate] = useState('');
   const [newLinkedScheduleId, setNewLinkedScheduleId] = useState('');
+  const [newDocNo, setNewDocNo] = useState('');
+  const [newDocTo, setNewDocTo] = useState('');
 
   useEffect(() => {
     const q = query(collection(db, 'todos'), orderBy('createdAt', 'desc'));
@@ -2212,6 +2412,8 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
       setTodos(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Todo));
     }, (err) => console.warn('todos snapshot error', err));
   }, []);
+
+  const visibleTodos = useMemo(() => myFilterOn ? todos.filter(t => t.assigneeId === myTeacherId) : todos, [todos, myFilterOn, myTeacherId]);
 
   // 마감일에 등록된 일정 목록 (일정-할 일 연동용)
   const schedulesForNewDue = useMemo(() => {
@@ -2234,6 +2436,10 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
         assigneeName: assigneeName || null,
         linkedScheduleId: linkedSchedule ? linkedSchedule.id : null,
         linkedScheduleLabel: linkedSchedule ? `${linkedSchedule.startTime} ${linkedSchedule.program}` : null,
+        docNo: newCategory === 'official' ? (newDocNo.trim() || null) : null,
+        docTo: newCategory === 'official' ? (newDocTo.trim() || null) : null,
+        checklist: [] as ChecklistItem[],
+        createdBy: authorName,
       };
 
       if (newRepeat !== 'none' && newDue && newRepeatEndDate) {
@@ -2252,44 +2458,192 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
           batch.set(ref, { ...base, dueDate: d, seriesId, createdAt: Timestamp.now() });
         });
         await batch.commit();
+        logActivity({ targetType: 'todo', targetId: seriesId, title: base.title, action: `반복 할 일 ${dates.length}건 등록`, by: authorName });
       } else {
-        await addDoc(collection(db, 'todos'), { ...base, dueDate: newDue || null, createdAt: Timestamp.now() });
+        const ref = await addDoc(collection(db, 'todos'), { ...base, dueDate: newDue || null, createdAt: Timestamp.now() });
+        logActivity({ targetType: 'todo', targetId: ref.id, title: base.title, action: '등록', by: authorName });
       }
       setNewTitle(''); setNewAssignee(''); setNewDue(''); setNewCategory('etc'); setNewTagsText('');
-      setNewRepeat('none'); setNewRepeatEndDate(''); setNewLinkedScheduleId('');
-    } catch (err) { console.error(err); }
+      setNewRepeat('none'); setNewRepeatEndDate(''); setNewLinkedScheduleId(''); setNewDocNo(''); setNewDocTo('');
+    } catch (err) { console.error(err); alert('할 일을 저장하지 못했습니다.'); }
   };
 
   const moveTodo = async (id: string, status: Todo['status']) => {
-    try { await updateDoc(doc(db, 'todos', id), { status }); } catch (err) { console.error(err); }
+    const t = todos.find(x => x.id === id);
+    try {
+      await updateDoc(doc(db, 'todos', id), { status });
+      logActivity({ targetType: 'todo', targetId: id, title: t?.title || '', action: `상태 → ${TODO_STATUSES.find(s => s.id === status)?.label}`, by: authorName });
+    } catch (err) { console.error(err); }
   };
 
   const deleteTodo = async (id: string) => {
     if (!window.confirm('이 할 일을 삭제할까요?')) return;
-    try { await deleteDoc(doc(db, 'todos', id)); } catch (err) { console.error(err); }
+    const t = todos.find(x => x.id === id);
+    try {
+      await deleteDoc(doc(db, 'todos', id));
+      logActivity({ targetType: 'todo', targetId: id, title: t?.title || '', action: '삭제', by: authorName });
+      if (detailTodoId === id) setDetailTodoId(null);
+    } catch (err) { console.error(err); }
   };
+
+  const changeTodoDue = async (id: string, dueDate: string) => {
+    const t = todos.find(x => x.id === id);
+    if (!t || t.dueDate === dueDate) return;
+    try {
+      await updateDoc(doc(db, 'todos', id), { dueDate });
+      logActivity({ targetType: 'todo', targetId: id, title: t.title, action: `마감일 ${t.dueDate || '없음'} → ${dueDate}`, by: authorName });
+    } catch (err) { console.error(err); }
+  };
+
+  const boardTodos = useMemo(() => {
+    if (quickFilter === 'today') return visibleTodos.filter(t => t.dueDate === today && t.status !== 'done');
+    if (quickFilter === 'overdue') return visibleTodos.filter(t => !!t.dueDate && t.dueDate < today && t.status !== 'done');
+    if (quickFilter === 'official') return visibleTodos.filter(t => t.category === 'official' && t.status !== 'done');
+    return visibleTodos;
+  }, [visibleTodos, quickFilter, today]);
 
   const columns = useMemo(() => {
     const byStatus: Record<Todo['status'], Todo[]> = { todo: [], doing: [], done: [] };
-    todos.forEach((t: Todo) => { (byStatus[t.status] || byStatus.todo).push(t); });
+    boardTodos.forEach((t: Todo) => { (byStatus[t.status] || byStatus.todo).push(t); });
     (Object.keys(byStatus) as Todo['status'][]).forEach(k => {
       byStatus[k].sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99'));
     });
     return byStatus;
-  }, [todos]);
+  }, [boardTodos]);
 
   const todosByCategory = useMemo(() => {
     const groups = TODO_CATEGORIES.map(c => ({ cat: c, items: [] as Todo[] }));
-    todos.forEach((t: Todo) => {
+    boardTodos.forEach((t: Todo) => {
       const g = groups.find(g => g.cat.id === (t.category || 'etc')) || groups[groups.length - 1];
       g.items.push(t);
     });
     groups.forEach(g => g.items.sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99')));
     return groups.filter(g => g.items.length > 0);
-  }, [todos]);
+  }, [boardTodos]);
 
-  const today = format(startOfToday(), 'yyyy-MM-dd');
+  // ---------- 할 일 상세 (체크리스트 · 댓글 · 기록) ----------
+  const [detailTodoId, setDetailTodoId] = useState<string | null>(null);
+  const detailTodo = detailTodoId ? todos.find(t => t.id === detailTodoId) || null : null;
+  const [dTitle, setDTitle] = useState('');
+  const [dNote, setDNote] = useState('');
+  const [dDue, setDDue] = useState('');
+  const [dAssignee, setDAssignee] = useState('');
+  const [dCategory, setDCategory] = useState('etc');
+  const [dDocNo, setDDocNo] = useState('');
+  const [dDocTo, setDDocTo] = useState('');
+  const [dChecklistText, setDChecklistText] = useState('');
+  const [dCommentText, setDCommentText] = useState('');
+  useEffect(() => {
+    if (!detailTodoId) return;
+    const t = todos.find(x => x.id === detailTodoId);
+    if (!t) return;
+    setDTitle(t.title || ''); setDNote(t.note || ''); setDDue(t.dueDate || ''); setDAssignee(t.assigneeId || '');
+    setDCategory(t.category || 'etc'); setDDocNo(t.docNo || ''); setDDocTo(t.docTo || '');
+    setDChecklistText(''); setDCommentText('');
+  }, [detailTodoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const openTodoDetail = (id: string) => { setDetailTodoId(id); setAlertsOpen(false); setSearchText(''); };
+
+  const saveTodoDetail = async () => {
+    if (!detailTodo) return;
+    if (!dTitle.trim()) { alert('제목을 입력해주세요.'); return; }
+    const changes: string[] = [];
+    if (dTitle.trim() !== detailTodo.title) changes.push('제목');
+    if ((dNote || '') !== (detailTodo.note || '')) changes.push('메모');
+    if ((dDue || '') !== (detailTodo.dueDate || '')) changes.push(`마감일 ${detailTodo.dueDate || '없음'} → ${dDue || '없음'}`);
+    if ((dAssignee || '') !== (detailTodo.assigneeId || '')) changes.push(`담당자 → ${teachers.find(t => t.id === dAssignee)?.name || '미지정'}`);
+    if (dCategory !== (detailTodo.category || 'etc')) changes.push(`분류 → ${todoCategoryOf(dCategory).label}`);
+    if ((dDocNo || '') !== (detailTodo.docNo || '') || (dDocTo || '') !== (detailTodo.docTo || '')) changes.push('공문 정보');
+    try {
+      await updateDoc(doc(db, 'todos', detailTodo.id), {
+        title: dTitle.trim(),
+        note: dNote,
+        dueDate: dDue || null,
+        assigneeId: dAssignee || null,
+        assigneeName: teachers.find(t => t.id === dAssignee)?.name || null,
+        category: dCategory,
+        docNo: dDocNo.trim() || null,
+        docTo: dDocTo.trim() || null,
+      });
+      if (changes.length) logActivity({ targetType: 'todo', targetId: detailTodo.id, title: dTitle.trim(), action: `수정: ${changes.join(', ')}`, by: authorName });
+      setDetailTodoId(null);
+    } catch (err) { console.error(err); alert('저장하지 못했습니다.'); }
+  };
+
+  const updateChecklist = async (t: Todo, next: ChecklistItem[]) => {
+    try { await updateDoc(doc(db, 'todos', t.id), { checklist: next }); } catch (err) { console.error(err); }
+  };
+  const addChecklistItem = () => {
+    if (!detailTodo || !dChecklistText.trim()) return;
+    updateChecklist(detailTodo, [...(detailTodo.checklist || []), { id: newLocalId(), text: dChecklistText.trim(), done: false }]);
+    setDChecklistText('');
+  };
+
+  const addComment = async () => {
+    if (!detailTodo || !dCommentText.trim()) return;
+    try {
+      await addDoc(collection(db, 'todoComments'), { todoId: detailTodo.id, text: dCommentText.trim(), authorName, createdAt: Timestamp.now() });
+      logActivity({ targetType: 'todo', targetId: detailTodo.id, title: detailTodo.title, action: '댓글 작성', by: authorName });
+      setDCommentText('');
+    } catch (err) { console.error(err); alert('댓글을 저장하지 못했습니다. (Firestore 보안 규칙에 todoComments 권한이 있는지 확인해주세요)'); }
+  };
+  const deleteComment = async (id: string) => {
+    if (!window.confirm('이 댓글을 삭제할까요?')) return;
+    try { await deleteDoc(doc(db, 'todoComments', id)); } catch (err) { console.error(err); }
+  };
+
+  // ---------- 업무 템플릿 ----------
+  const [templates, setTemplates] = useState<TodoTemplate[]>([]);
+  const [isTemplateOpen, setIsTemplateOpen] = useState(false);
+  const [tplName, setTplName] = useState('');
+  const [tplItems, setTplItems] = useState<TemplateItem[]>([{ title: '', offset: 0, category: 'etc' }]);
+  const [applyTplId, setApplyTplId] = useState('');
+  const [applyDate, setApplyDate] = useState(today);
+  const [applyAssignee, setApplyAssignee] = useState('');
+
+  useEffect(() => {
+    return onSnapshot(collection(db, 'todoTemplates'), (snap) => {
+      setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() }) as TodoTemplate).sort((a, b) => a.name.localeCompare(b.name)));
+    }, (err) => console.warn('todoTemplates snapshot error', err));
+  }, []);
+
+  const saveTemplate = async () => {
+    const items = tplItems.filter(i => i.title.trim()).map(i => ({ title: i.title.trim(), offset: Number(i.offset) || 0, category: i.category || 'etc' }));
+    if (!tplName.trim() || items.length === 0) { alert('템플릿 이름과 항목을 한 개 이상 입력해주세요.'); return; }
+    try {
+      const ref = await addDoc(collection(db, 'todoTemplates'), { name: tplName.trim(), items, createdAt: Timestamp.now() });
+      logActivity({ targetType: 'template', targetId: ref.id, title: tplName.trim(), action: `템플릿 저장 (${items.length}개 항목)`, by: authorName });
+      setTplName(''); setTplItems([{ title: '', offset: 0, category: 'etc' }]);
+    } catch (err) { console.error(err); alert('템플릿을 저장하지 못했습니다. (Firestore 보안 규칙에 todoTemplates 권한이 있는지 확인해주세요)'); }
+  };
+  const deleteTemplate = async (tpl: TodoTemplate) => {
+    if (!window.confirm(`'${tpl.name}' 템플릿을 삭제할까요?`)) return;
+    try { await deleteDoc(doc(db, 'todoTemplates', tpl.id)); if (applyTplId === tpl.id) setApplyTplId(''); } catch (err) { console.error(err); }
+  };
+  const applyTemplate = async () => {
+    const tpl = templates.find(t => t.id === applyTplId);
+    if (!tpl || !applyDate) { alert('템플릿과 기준일을 선택해주세요.'); return; }
+    try {
+      const base = parseISO(applyDate);
+      const assigneeName = teachers.find(t => t.id === applyAssignee)?.name || null;
+      const batch = writeBatch(db);
+      tpl.items.forEach(item => {
+        const ref = doc(collection(db, 'todos'));
+        batch.set(ref, {
+          title: item.title, status: 'todo', category: item.category || 'etc', tags: [tpl.name],
+          assigneeId: applyAssignee || null, assigneeName,
+          dueDate: format(addDays(base, Number(item.offset) || 0), 'yyyy-MM-dd'),
+          checklist: [], createdBy: authorName, createdAt: Timestamp.now(),
+        });
+      });
+      await batch.commit();
+      logActivity({ targetType: 'template', targetId: tpl.id, title: tpl.name, action: `템플릿 적용 (${applyDate} 기준, ${tpl.items.length}건)`, by: authorName });
+      alert(`'${tpl.name}' 템플릿으로 할 일 ${tpl.items.length}건을 등록했습니다.`);
+      setApplyTplId('');
+    } catch (err) { console.error(err); alert('템플릿을 적용하지 못했습니다.'); }
+  };
+
+  // ---------- 캘린더 ----------
   const [calBaseDate, setCalBaseDate] = useState(startOfToday());
   const [calSelectedDate, setCalSelectedDate] = useState<string | null>(null);
   const calDays = useMemo(() => {
@@ -2303,9 +2657,9 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   }, [calBaseDate]);
   const todosByDate = useMemo(() => {
     const map: Record<string, Todo[]> = {};
-    todos.forEach((t: Todo) => { if (t.dueDate) (map[t.dueDate] ||= []).push(t); });
+    visibleTodos.forEach((t: Todo) => { if (t.dueDate) (map[t.dueDate] ||= []).push(t); });
     return map;
-  }, [todos]);
+  }, [visibleTodos]);
 
   // ---------- 날짜 메모 ----------
   const [dayNotes, setDayNotes] = useState<Record<string, DayNote>>({});
@@ -2328,6 +2682,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   const openMemo = (dateStr: string) => {
     setMemoDate(dateStr);
     setMemoText(dayNotes[dateStr]?.content || '');
+    setSearchText('');
   };
 
   // 한 번 누르면 날짜 선택, 같은 칸을 빠르게 두 번 누르면(더블클릭/더블탭) 메모 창 열기
@@ -2350,9 +2705,13 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
     try {
       const text = memoText.trim();
       if (!text) {
-        if (dayNotes[memoDate]) await deleteDoc(doc(db, 'dayNotes', dayNotes[memoDate].id));
+        if (dayNotes[memoDate]) {
+          await deleteDoc(doc(db, 'dayNotes', dayNotes[memoDate].id));
+          logActivity({ targetType: 'memo', targetId: memoDate, title: `${memoDate} 메모`, action: '삭제', by: authorName });
+        }
       } else {
         await setDoc(doc(db, 'dayNotes', memoDate), { date: memoDate, content: text, authorName, updatedAt: Timestamp.now() });
+        logActivity({ targetType: 'memo', targetId: memoDate, title: `${memoDate} 메모`, action: dayNotes[memoDate] ? '수정' : '작성', by: authorName });
       }
       setMemoDate(null);
     } catch (err) {
@@ -2364,7 +2723,11 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   const deleteMemo = async () => {
     if (!memoDate || !dayNotes[memoDate]) { setMemoDate(null); return; }
     if (!window.confirm('이 날짜의 메모를 삭제할까요?')) return;
-    try { await deleteDoc(doc(db, 'dayNotes', dayNotes[memoDate].id)); setMemoDate(null); } catch (err) { console.error(err); }
+    try {
+      await deleteDoc(doc(db, 'dayNotes', dayNotes[memoDate].id));
+      logActivity({ targetType: 'memo', targetId: memoDate, title: `${memoDate} 메모`, action: '삭제', by: authorName });
+      setMemoDate(null);
+    } catch (err) { console.error(err); }
   };
 
   // ---------- 출장 ----------
@@ -2376,6 +2739,10 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   const [tripStart, setTripStart] = useState('');
   const [tripEnd, setTripEnd] = useState('');
   const [tripPlace, setTripPlace] = useState('');
+  const [tripMakeReport, setTripMakeReport] = useState(true);
+  const [tripResultDraft, setTripResultDraft] = useState('');
+  const [tripEditStart, setTripEditStart] = useState('');
+  const [tripEditEnd, setTripEditEnd] = useState('');
 
   useEffect(() => {
     return onSnapshot(collection(db, 'trips'), (snap) => {
@@ -2383,22 +2750,63 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
     }, (err) => console.warn('trips snapshot error', err));
   }, []);
 
+  const visibleTrips = useMemo(() => myFilterOn ? trips.filter(t => t.assigneeId === myTeacherId) : trips, [trips, myFilterOn, myTeacherId]);
+
+  // 출장 기간에 그 선생님 수업이 잡혀 있는지 (교사 시간표와 비교)
+  const tripConflicts = (assigneeId: string | null | undefined, start: string, end: string) => {
+    if (!assigneeId || !start) return [] as Schedule[];
+    const e = end || start;
+    return schedules
+      .filter(s => s.teacherId === assigneeId && s.date >= start && s.date <= e)
+      .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  };
+  const formConflicts = useMemo(() => {
+    const s = tripStart; const e = tripEnd || tripStart;
+    if (!s) return [] as Schedule[];
+    return tripConflicts(tripAssignee, s <= e ? s : e, s <= e ? e : s);
+  }, [tripAssignee, tripStart, tripEnd, schedules]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const addTrip = async () => {
     if (!tripTitle.trim() || !tripStart) { alert('출장명과 시작일을 입력해주세요.'); return; }
     let start = tripStart;
     let end = tripEnd || tripStart;
     if (end < start) { const tmp = start; start = end; end = tmp; }
+    const conflicts = tripConflicts(tripAssignee, start, end);
+    if (conflicts.length > 0) {
+      const lines = conflicts.slice(0, 5).map(s => `· ${s.date} ${s.startTime} ${s.program}`).join('\n');
+      if (!window.confirm(`출장 기간에 이 선생님의 수업 ${conflicts.length}건이 겹칩니다.\n\n${lines}${conflicts.length > 5 ? '\n…' : ''}\n\n그래도 출장을 등록할까요?`)) return;
+    }
     try {
-      await addDoc(collection(db, 'trips'), {
+      const assigneeName = teachers.find(t => t.id === tripAssignee)?.name || null;
+      const ref = await addDoc(collection(db, 'trips'), {
         title: tripTitle.trim(),
         startDate: start,
         endDate: end,
         place: tripPlace.trim() || null,
         assigneeId: tripAssignee || null,
-        assigneeName: teachers.find(t => t.id === tripAssignee)?.name || null,
+        assigneeName,
         authorName,
+        result: '',
         createdAt: Timestamp.now(),
       });
+      logActivity({ targetType: 'trip', targetId: ref.id, title: tripTitle.trim(), action: `등록 (${start} ~ ${end})`, by: authorName });
+      // 출장이 끝나면 복명서 할 일을 자동으로 만들기
+      if (tripMakeReport) {
+        await addDoc(collection(db, 'todos'), {
+          title: `[복명서] ${tripTitle.trim()}`,
+          status: 'todo', category: 'admin', tags: ['출장'],
+          assigneeId: tripAssignee || null, assigneeName,
+          dueDate: format(addDays(parseISO(end), 1), 'yyyy-MM-dd'),
+          linkedTripId: ref.id,
+          checklist: [
+            { id: newLocalId(), text: '출장 결과 정리', done: false },
+            { id: newLocalId(), text: '복명서 작성', done: false },
+            { id: newLocalId(), text: '증빙 서류 제출', done: false },
+          ],
+          createdBy: authorName,
+          createdAt: Timestamp.now(),
+        });
+      }
       setTripTitle(''); setTripAssignee(''); setTripStart(''); setTripEnd(''); setTripPlace('');
       setIsTripFormOpen(false);
       setCalBaseDate(parseISO(start));
@@ -2409,8 +2817,41 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   };
 
   const deleteTrip = async (id: string) => {
-    if (!window.confirm('이 출장 일정을 삭제할까요?')) return;
-    try { await deleteDoc(doc(db, 'trips', id)); setSelectedTripId(null); } catch (err) { console.error(err); }
+    const trip = trips.find(t => t.id === id);
+    const linked = todos.filter(t => t.linkedTripId === id);
+    if (!window.confirm(`이 출장 일정을 삭제할까요?${linked.length ? `\n연결된 복명서 할 일 ${linked.length}건도 함께 삭제됩니다.` : ''}`)) return;
+    try {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'trips', id));
+      linked.forEach(t => batch.delete(doc(db, 'todos', t.id)));
+      await batch.commit();
+      logActivity({ targetType: 'trip', targetId: id, title: trip?.title || '', action: '삭제', by: authorName });
+      setSelectedTripId(null);
+    } catch (err) { console.error(err); }
+  };
+
+  const shiftTrip = async (trip: Trip, newStart: string, newEnd: string) => {
+    if (!newStart) return;
+    let s = newStart; let e = newEnd || newStart;
+    if (e < s) { const tmp = s; s = e; e = tmp; }
+    if (s === trip.startDate && e === trip.endDate) return;
+    const conflicts = tripConflicts(trip.assigneeId, s, e);
+    if (conflicts.length > 0 && !window.confirm(`바뀐 기간에 수업 ${conflicts.length}건이 겹칩니다. 그래도 옮길까요?`)) return;
+    try {
+      await updateDoc(doc(db, 'trips', trip.id), { startDate: s, endDate: e });
+      // 연결된 복명서 마감일도 함께 조정
+      const linked = todos.filter(t => t.linkedTripId === trip.id && t.status !== 'done');
+      await Promise.all(linked.map(t => updateDoc(doc(db, 'todos', t.id), { dueDate: format(addDays(parseISO(e), 1), 'yyyy-MM-dd') })));
+      logActivity({ targetType: 'trip', targetId: trip.id, title: trip.title, action: `기간 변경 ${trip.startDate}~${trip.endDate} → ${s}~${e}`, by: authorName });
+    } catch (err) { console.error(err); }
+  };
+
+  const saveTripResult = async (trip: Trip) => {
+    try {
+      await updateDoc(doc(db, 'trips', trip.id), { result: tripResultDraft });
+      logActivity({ targetType: 'trip', targetId: trip.id, title: trip.title, action: '출장 결과 메모 저장', by: authorName });
+      alert('출장 결과를 저장했습니다.');
+    } catch (err) { console.error(err); }
   };
 
   const tripNights = (t: Trip) => {
@@ -2420,15 +2861,32 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
     } catch { return ''; }
   };
 
+  const selectedTrip = selectedTripId ? trips.find(t => t.id === selectedTripId) || null : null;
+  useEffect(() => {
+    if (!selectedTrip) return;
+    setTripResultDraft(selectedTrip.result || '');
+    setTripEditStart(selectedTrip.startDate);
+    setTripEditEnd(selectedTrip.endDate);
+  }, [selectedTripId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openTrip = (id: string) => {
+    const t = trips.find(x => x.id === id);
+    setSubTab('calendar');
+    setSelectedTripId(id);
+    setCalSelectedDate(null);
+    if (t) setCalBaseDate(parseISO(t.startDate));
+    setSearchText('');
+  };
+
   // 달력을 주 단위로 나누고, 주마다 출장 띠의 위치(시작 칸, 끝 칸, 줄 번호)를 계산
   const calWeeks = useMemo(() => {
-    const weeks: { days: Date[]; segs: { trip: Trip; startCol: number; endCol: number; lane: number; contL: boolean; contR: boolean }[]; laneCount: number }[] = [];
+    const weeks: { days: Date[]; dayStrs: string[]; segs: { trip: Trip; startCol: number; endCol: number; lane: number; contL: boolean; contR: boolean }[]; laneCount: number }[] = [];
     for (let i = 0; i + 7 <= calDays.length; i += 7) {
       const days = calDays.slice(i, i + 7);
       const dayStrs = days.map(d => format(d, 'yyyy-MM-dd'));
       const ws = dayStrs[0];
       const we = dayStrs[6];
-      const overlapping = trips
+      const overlapping = visibleTrips
         .filter(t => t.startDate <= we && (t.endDate || t.startDate) >= ws)
         .sort((a, b) => a.startDate.localeCompare(b.startDate) || (b.endDate || b.startDate).localeCompare(a.endDate || a.startDate));
       const laneEnds: number[] = [];
@@ -2440,69 +2898,66 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
         if (lane === -1) { lane = laneEnds.length; laneEnds.push(endCol); } else { laneEnds[lane] = endCol; }
         return { trip: t, startCol, endCol, lane, contL: t.startDate < ws, contR: end > we };
       });
-      weeks.push({ days, segs, laneCount: laneEnds.length });
+      weeks.push({ days, dayStrs, segs, laneCount: laneEnds.length });
     }
     return weeks;
-  }, [calDays, trips]);
+  }, [calDays, visibleTrips]);
 
-  const tripsOnDate = (dateStr: string) => trips.filter(t => t.startDate <= dateStr && (t.endDate || t.startDate) >= dateStr);
-  const selectedTrip = selectedTripId ? trips.find(t => t.id === selectedTripId) || null : null;
+  const tripsOnDate = (dateStr: string) => visibleTrips.filter(t => t.startDate <= dateStr && (t.endDate || t.startDate) >= dateStr);
+
+  // ---------- 드래그로 날짜 옮기기 (PC) ----------
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const handleDropOnDate = (dateStr: string, e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverDate(null);
+    let data: { type: string; id: string; origin?: string } | null = null;
+    try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { return; }
+    if (!data) return;
+    if (data.type === 'todo') {
+      changeTodoDue(data.id, dateStr);
+    } else if (data.type === 'trip') {
+      const trip = trips.find(t => t.id === data!.id);
+      if (!trip || !data.origin) return;
+      const delta = Math.round((parseISO(dateStr).getTime() - parseISO(data.origin).getTime()) / 86400000);
+      if (delta === 0) return;
+      shiftTrip(trip, format(addDays(parseISO(trip.startDate), delta), 'yyyy-MM-dd'), format(addDays(parseISO(trip.endDate || trip.startDate), delta), 'yyyy-MM-dd'));
+    }
+  };
+  const dropProps = (dateStr: string) => ({
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragOverDate !== dateStr) setDragOverDate(dateStr); },
+    onDragLeave: () => { if (dragOverDate === dateStr) setDragOverDate(null); },
+    onDrop: (e: React.DragEvent) => handleDropOnDate(dateStr, e),
+  });
 
   // 이번 달 진행률
   const monthProgress = useMemo(() => {
     const monthStr = format(calBaseDate, 'yyyy-MM');
-    const monthTodos = todos.filter((t: Todo) => t.dueDate && t.dueDate.startsWith(monthStr));
+    const monthTodos = visibleTodos.filter((t: Todo) => t.dueDate && t.dueDate.startsWith(monthStr));
     const done = monthTodos.filter((t: Todo) => t.status === 'done').length;
     const doing = monthTodos.filter((t: Todo) => t.status === 'doing').length;
     const pct = monthTodos.length ? Math.round((done / monthTodos.length) * 100) : 0;
     return { total: monthTodos.length, done, doing, pct };
-  }, [todos, calBaseDate]);
+  }, [visibleTodos, calBaseDate]);
 
-  // 이번 주 할 일 인쇄/내보내기
-  const printWeeklyExport = () => {
-    const weekStart = startOfWeek(startOfToday(), { weekStartsOn: 0 });
-    const weekEnd = endOfWeek(startOfToday(), { weekStartsOn: 0 });
-    const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const rows = weekDays.map(d => {
-      const dateStr = format(d, 'yyyy-MM-dd');
-      const items = (todosByDate[dateStr] || []).slice().sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0));
-      return { label: format(d, 'M/d (EEE)', { locale: ko }), holiday: koreanHolidays[dateStr], items };
-    });
-    const win = window.open('', '_blank', 'width=800,height=1000');
-    if (!win) { alert('팝업이 차단되어 있습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도해주세요.'); return; }
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>이번 주 할 일 (${esc(format(weekStart, 'yyyy-MM-dd'))} ~ ${esc(format(weekEnd, 'yyyy-MM-dd'))})</title>
-    <style>
-      body{font-family:-apple-system,'Malgun Gothic','Apple SD Gothic Neo',sans-serif;padding:32px;color:#1a1a1a;}
-      h1{font-size:20px;margin:0 0 4px;}
-      p.sub{color:#777;font-size:12px;margin:0 0 24px;}
-      .day{margin-bottom:18px;page-break-inside:avoid;}
-      .day h2{font-size:13px;border-bottom:2px solid #333;padding-bottom:5px;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
-      .day h2 .holiday{color:#c0392b;font-weight:bold;font-size:11px;}
-      ul{list-style:none;padding:0;margin:0;}
-      li{padding:6px 2px;border-bottom:1px solid #eee;font-size:13px;display:flex;align-items:center;gap:8px;}
-      li.done{color:#aaa;text-decoration:line-through;}
-      .tag{font-size:10px;font-weight:bold;padding:2px 8px;border-radius:999px;background:#eee;color:#555;white-space:nowrap;}
-      .empty{color:#bbb;font-size:12px;font-style:italic;padding:4px 2px;}
-      @media print{ body{padding:12px;} }
-    </style></head><body>
-      <h1>이번 주 할 일</h1>
-      <p class="sub">${esc(format(weekStart, 'yyyy년 M월 d일'))} ~ ${esc(format(weekEnd, 'M월 d일'))} · 출력일 ${esc(format(startOfToday(), 'yyyy-MM-dd'))}</p>
-      ${rows.map(r => `
-        <div class="day">
-          <h2>${esc(r.label)}${r.holiday ? ` <span class="holiday">${esc(r.holiday)}</span>` : ''}</h2>
-          ${r.items.length === 0 ? '<p class="empty">등록된 할 일이 없습니다.</p>' : `<ul>${r.items.map(t => `<li class="${t.status === 'done' ? 'done' : ''}">${t.status === 'done' ? '✅' : '⬜'} <b>${esc(t.title)}</b> <span class="tag">${esc(todoCategoryOf(t.category).label)}</span>${t.assigneeName ? ` <span class="tag">${esc(t.assigneeName)}</span>` : ''}${t.linkedScheduleLabel ? ` <span class="tag">🔗 ${esc(t.linkedScheduleLabel)}</span>` : ''}</li>`).join('')}</ul>`}
-        </div>`).join('')}
-    </body></html>`;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 300);
-  };
+  // ---------- 오늘의 업무 요약 ----------
+  const summary = useMemo(() => {
+    const todayDue = visibleTodos.filter(t => t.dueDate === today && t.status !== 'done');
+    const overdue = visibleTodos.filter(t => !!t.dueDate && t.dueDate < today && t.status !== 'done');
+    const officialSoon = visibleTodos.filter(t => t.category === 'official' && t.status !== 'done' && (daysUntil(t.dueDate) ?? 99) <= 3);
+    const todayTrips = visibleTrips.filter(t => t.startDate <= today && (t.endDate || t.startDate) >= today);
+    const todaySchedules = schedules.filter(s => s.date === today && (!myFilterOn || s.teacherId === myTeacherId));
+    const conflictTrips = visibleTrips
+      .filter(t => (t.endDate || t.startDate) >= today)
+      .map(t => ({ trip: t, conflicts: tripConflicts(t.assigneeId, t.startDate, t.endDate || t.startDate) }))
+      .filter(x => x.conflicts.length > 0);
+    return { todayDue, overdue, officialSoon, todayTrips, todaySchedules, conflictTrips };
+  }, [visibleTodos, visibleTrips, schedules, today, myFilterOn, myTeacherId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---------- 업무 메모 (인수인계) ----------
   const [notes, setNotes] = useState<HandoffNote[]>([]);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteContent, setNoteContent] = useState('');
+  const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'handoffNotes'), orderBy('createdAt', 'desc'));
@@ -2514,23 +2969,157 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   const addNote = async () => {
     if (!noteTitle.trim() || !noteContent.trim()) return;
     try {
-      await addDoc(collection(db, 'handoffNotes'), {
+      const ref = await addDoc(collection(db, 'handoffNotes'), {
         title: noteTitle.trim(), content: noteContent.trim(), authorName, createdAt: Timestamp.now(),
       });
+      logActivity({ targetType: 'note', targetId: ref.id, title: noteTitle.trim(), action: '작성', by: authorName });
       setNoteTitle(''); setNoteContent('');
     } catch (err) { console.error(err); }
   };
 
   const deleteNote = async (id: string) => {
     if (!window.confirm('이 메모를 삭제할까요?')) return;
-    try { await deleteDoc(doc(db, 'handoffNotes', id)); } catch (err) { console.error(err); }
+    const n = notes.find(x => x.id === id);
+    try {
+      await deleteDoc(doc(db, 'handoffNotes', id));
+      logActivity({ targetType: 'note', targetId: id, title: n?.title || '', action: '삭제', by: authorName });
+    } catch (err) { console.error(err); }
   };
 
+  // ---------- 변경 기록 ----------
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [logFilter, setLogFilter] = useState<'all' | ActivityLog['targetType']>('all');
+  useEffect(() => {
+    const q = query(collection(db, 'activityLog'), orderBy('at', 'desc'));
+    return onSnapshot(q, (snap) => {
+      setLogs(snap.docs.slice(0, 300).map(d => ({ id: d.id, ...d.data() }) as ActivityLog));
+    }, (err) => console.warn('activityLog snapshot error', err));
+  }, []);
+  const filteredLogs = logFilter === 'all' ? logs : logs.filter(l => l.targetType === logFilter);
+
+  // ---------- 통합 검색 ----------
+  const [searchText, setSearchText] = useState('');
+  const searchResults = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return null;
+    const has = (...vals: (string | null | undefined)[]) => vals.some(v => (v || '').toLowerCase().includes(q));
+    return {
+      todos: todos.filter(t => has(t.title, t.note, t.docNo, t.docTo, t.assigneeName, (t.tags || []).join(' '), ...(t.checklist || []).map(c => c.text))).slice(0, 15),
+      trips: trips.filter(t => has(t.title, t.place, t.assigneeName, t.result)).slice(0, 10),
+      memos: (Object.values(dayNotes) as DayNote[]).filter(n => has(n.content)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10),
+      notes: notes.filter(n => has(n.title, n.content)).slice(0, 10),
+    };
+  }, [searchText, todos, trips, dayNotes, notes]);
+  const searchCount = searchResults ? searchResults.todos.length + searchResults.trips.length + searchResults.memos.length + searchResults.notes.length : 0;
+
+  // ---------- 인쇄 ----------
+  const PRINT_STYLE = `
+      body{font-family:-apple-system,'Malgun Gothic','Apple SD Gothic Neo',sans-serif;padding:32px;color:#1a1a1a;}
+      h1{font-size:20px;margin:0 0 4px;}
+      h2{font-size:14px;border-bottom:2px solid #333;padding-bottom:5px;margin:22px 0 8px;}
+      p.sub{color:#777;font-size:12px;margin:0 0 20px;}
+      .day{margin-bottom:18px;page-break-inside:avoid;}
+      .day h3{font-size:13px;border-bottom:1px solid #999;padding-bottom:4px;margin:0 0 6px;display:flex;align-items:center;gap:8px;}
+      .holiday{color:#c0392b;font-weight:bold;font-size:11px;}
+      ul{list-style:none;padding:0;margin:0;}
+      li{padding:6px 2px;border-bottom:1px solid #eee;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+      li.done{color:#aaa;text-decoration:line-through;}
+      .tag{font-size:10px;font-weight:bold;padding:2px 8px;border-radius:999px;background:#eee;color:#555;white-space:nowrap;}
+      .empty{color:#bbb;font-size:12px;font-style:italic;padding:4px 2px;}
+      .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+      .stat{border:1px solid #ddd;border-radius:10px;padding:10px 14px;min-width:90px;}
+      .stat b{display:block;font-size:20px;}
+      .stat span{font-size:11px;color:#777;}
+      table{width:100%;border-collapse:collapse;font-size:12px;}
+      th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top;}
+      th{background:#f4f4f4;}
+      .pre{white-space:pre-wrap;}
+      @media print{ body{padding:12px;} }`;
+
+  const openPrintWindow = (title: string, body: string) => {
+    const win = window.open('', '_blank', 'width=860,height=1000');
+    if (!win) { alert('팝업이 차단되어 있습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도해주세요.'); return; }
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escHtml(title)}</title><style>${PRINT_STYLE}</style></head><body>${body}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  };
+  const scopeLabel = myFilterOn ? ` · ${myTeacherName} 선생님` : '';
+  const todoLi = (t: Todo) => `<li class="${t.status === 'done' ? 'done' : ''}">${t.status === 'done' ? '✅' : '⬜'} <b>${escHtml(t.title)}</b> <span class="tag">${escHtml(todoCategoryOf(t.category).label)}</span>${t.assigneeName ? ` <span class="tag">${escHtml(t.assigneeName)}</span>` : ''}${t.docNo ? ` <span class="tag">공문 ${escHtml(t.docNo)}</span>` : ''}${t.linkedScheduleLabel ? ` <span class="tag">🔗 ${escHtml(t.linkedScheduleLabel)}</span>` : ''}${(t.checklist || []).length ? ` <span class="tag">☑ ${(t.checklist || []).filter(c => c.done).length}/${(t.checklist || []).length}</span>` : ''}</li>`;
+
+  // 이번 주 할 일 인쇄/내보내기
+  const printWeeklyExport = () => {
+    const weekStart = startOfWeek(startOfToday(), { weekStartsOn: 0 });
+    const weekEnd = endOfWeek(startOfToday(), { weekStartsOn: 0 });
+    const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
+    const rows = weekDays.map(d => {
+      const dateStr = format(d, 'yyyy-MM-dd');
+      const items = (todosByDate[dateStr] || []).slice().sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0));
+      const dayTrips = tripsOnDate(dateStr);
+      return { label: format(d, 'M/d (EEE)', { locale: ko }), holiday: koreanHolidays[dateStr], items, dayTrips, memo: dayNotes[dateStr]?.content };
+    });
+    const body = `
+      <h1>이번 주 할 일${escHtml(scopeLabel)}</h1>
+      <p class="sub">${escHtml(format(weekStart, 'yyyy년 M월 d일'))} ~ ${escHtml(format(weekEnd, 'M월 d일'))} · 출력일 ${escHtml(today)}</p>
+      ${rows.map(r => `
+        <div class="day">
+          <h3>${escHtml(r.label)}${r.holiday ? ` <span class="holiday">${escHtml(r.holiday)}</span>` : ''}</h3>
+          ${r.dayTrips.length ? `<ul>${r.dayTrips.map(t => `<li>✈️ <b>${escHtml(t.title)}</b>${t.assigneeName ? ` <span class="tag">${escHtml(t.assigneeName)}</span>` : ''}</li>`).join('')}</ul>` : ''}
+          ${r.items.length === 0 ? '<p class="empty">등록된 할 일이 없습니다.</p>' : `<ul>${r.items.map(todoLi).join('')}</ul>`}
+          ${r.memo ? `<p class="pre" style="font-size:12px;color:#555;margin:6px 2px 0;">📝 ${escHtml(r.memo)}</p>` : ''}
+        </div>`).join('')}`;
+    openPrintWindow(`이번 주 할 일 (${format(weekStart, 'yyyy-MM-dd')} ~ ${format(weekEnd, 'yyyy-MM-dd')})`, body);
+  };
+
+  // 월간 업무 보고서
+  const printMonthlyReport = () => {
+    const monthStr = format(calBaseDate, 'yyyy-MM');
+    const monthStart = `${monthStr}-01`;
+    const monthEnd = format(endOfMonth(calBaseDate), 'yyyy-MM-dd');
+    const monthTodos = visibleTodos.filter(t => t.dueDate && t.dueDate.startsWith(monthStr)).sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+    const done = monthTodos.filter(t => t.status === 'done');
+    const notDone = monthTodos.filter(t => t.status !== 'done');
+    const officials = monthTodos.filter(t => t.category === 'official');
+    const monthTrips = visibleTrips.filter(t => t.startDate <= monthEnd && (t.endDate || t.startDate) >= monthStart).sort((a, b) => a.startDate.localeCompare(b.startDate));
+    const memos = (Object.values(dayNotes) as DayNote[]).filter(n => n.date.startsWith(monthStr)).sort((a, b) => a.date.localeCompare(b.date));
+    const monthSchedules = schedules.filter(s => s.date.startsWith(monthStr) && (!myFilterOn || s.teacherId === myTeacherId));
+    const catStats = TODO_CATEGORIES.map(c => ({ c, total: monthTodos.filter(t => (t.category || 'etc') === c.id).length, done: done.filter(t => (t.category || 'etc') === c.id).length })).filter(x => x.total > 0);
+    const body = `
+      <h1>${escHtml(format(calBaseDate, 'yyyy년 M월'))} 업무 보고서${escHtml(scopeLabel)}</h1>
+      <p class="sub">작성: ${escHtml(authorName)} · 출력일 ${escHtml(today)}</p>
+      <div class="stats">
+        <div class="stat"><b>${monthTodos.length}</b><span>전체 할 일</span></div>
+        <div class="stat"><b>${done.length}</b><span>완료 (${monthTodos.length ? Math.round(done.length / monthTodos.length * 100) : 0}%)</span></div>
+        <div class="stat"><b>${notDone.length}</b><span>미완료</span></div>
+        <div class="stat"><b>${monthTrips.length}</b><span>출장</span></div>
+        <div class="stat"><b>${monthSchedules.length}</b><span>수업·일정</span></div>
+      </div>
+      <h2>분류별 현황</h2>
+      ${catStats.length ? `<table><tr><th>분류</th><th>전체</th><th>완료</th></tr>${catStats.map(x => `<tr><td>${escHtml(x.c.label)}</td><td>${x.total}</td><td>${x.done}</td></tr>`).join('')}</table>` : '<p class="empty">이번 달 할 일이 없습니다.</p>'}
+      <h2>완료한 업무</h2>
+      ${done.length ? `<ul>${done.map(t => todoLi(t).replace('<li class="done">', '<li>')).join('')}</ul>` : '<p class="empty">없음</p>'}
+      <h2>남은 업무</h2>
+      ${notDone.length ? `<ul>${notDone.map(t => todoLi(t).replace('<b>', `<span class="tag">${escHtml((t.dueDate || '').slice(5))}</span> <b>`)).join('')}</ul>` : '<p class="empty">없음</p>'}
+      <h2>공문 처리</h2>
+      ${officials.length ? `<table><tr><th>기한</th><th>공문</th><th>번호</th><th>제출처</th><th>상태</th></tr>${officials.map(t => `<tr><td>${escHtml(t.dueDate || '')}</td><td>${escHtml(t.title)}</td><td>${escHtml(t.docNo || '')}</td><td>${escHtml(t.docTo || '')}</td><td>${t.status === 'done' ? '완료' : '미완료'}</td></tr>`).join('')}</table>` : '<p class="empty">없음</p>'}
+      <h2>출장 내역</h2>
+      ${monthTrips.length ? `<table><tr><th>기간</th><th>출장</th><th>출장자</th><th>장소</th><th>결과</th></tr>${monthTrips.map(t => `<tr><td>${escHtml(t.startDate)} ~ ${escHtml(t.endDate)}</td><td>${escHtml(t.title)}</td><td>${escHtml(t.assigneeName || '')}</td><td>${escHtml(t.place || '')}</td><td class="pre">${escHtml(t.result || '')}</td></tr>`).join('')}</table>` : '<p class="empty">없음</p>'}
+      <h2>날짜 메모</h2>
+      ${memos.length ? `<table><tr><th style="width:90px">날짜</th><th>내용</th></tr>${memos.map(m => `<tr><td>${escHtml(m.date)}</td><td class="pre">${escHtml(m.content)}</td></tr>`).join('')}</table>` : '<p class="empty">없음</p>'}`;
+    openPrintWindow(`${format(calBaseDate, 'yyyy년 M월')} 업무 보고서`, body);
+  };
+
+  // ---------- 할 일 카드 ----------
   const TodoRow = ({ t, compact }: { t: Todo; compact?: boolean }) => {
     const overdue = t.dueDate && t.dueDate < today && t.status !== 'done';
     const cat = todoCategoryOf(t.category);
+    const dd = daysUntil(t.dueDate);
+    const cl = t.checklist || [];
+    const clDone = cl.filter(c => c.done).length;
+    const cmtCount = (commentsByTodo[t.id] || []).length;
+    const isOfficial = t.category === 'official';
     return (
-      <div className={cn("p-3 bg-bg-primary rounded-xl border group", compact ? "flex items-center gap-3" : "border-border-color")}>
+      <div className={cn("p-3 bg-bg-primary rounded-xl border group", compact ? "flex items-center gap-3 border-transparent" : "border-border-color", isOfficial && t.status !== 'done' && dd !== null && dd <= 3 && "border-red-200")}>
         {compact && (
           <button
             onClick={() => moveTodo(t.id, t.status === 'done' ? 'todo' : 'done')}
@@ -2542,18 +3131,33 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className={cn("text-sm font-semibold text-text-main flex-1", t.status === 'done' && "line-through opacity-50")}>{t.title}{t.seriesId && <span className="ml-1 text-xs" title="반복 업무">🔁</span>}</p>
-            <button onClick={() => deleteTodo(t.id)} className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><X size={14} /></button>
+            <button onClick={() => openTodoDetail(t.id)} className={cn("text-left text-sm font-semibold text-text-main flex-1 hover:text-accent-color transition-colors", t.status === 'done' && "line-through opacity-50")} title="눌러서 상세 보기 (체크리스트·댓글·기록)">
+              {t.title}{t.seriesId && <span className="ml-1 text-xs" title="반복 업무">🔁</span>}
+            </button>
+            <button onClick={() => deleteTodo(t.id)} className="lg:opacity-0 lg:group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><X size={14} /></button>
           </div>
           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
             <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1", cat.bg, cat.text)}><span className={cn("w-1.5 h-1.5 rounded-full", cat.dot)} />{cat.label}</span>
+            {isOfficial && t.docNo && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-text-muted">📄 {t.docNo}</span>}
+            {isOfficial && t.docTo && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-text-muted">→ {t.docTo}</span>}
             {(t.tags || []).map(tag => (
               <span key={tag} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">#{tag}</span>
             ))}
             {t.assigneeName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-accent-color">{t.assigneeName}</span>}
             {t.dueDate && <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", overdue ? "bg-red-50 text-red-500" : "bg-gray-100 text-text-muted")}>{t.dueDate}{overdue ? ' 지남' : ''}</span>}
+            {t.status !== 'done' && dd !== null && dd >= 0 && dd <= 7 && (
+              <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full", dd <= (isOfficial ? 3 : 1) ? "bg-red-500 text-white" : "bg-amber-50 text-amber-700")}>{ddayLabel(dd)}</span>
+            )}
+            {cl.length > 0 && <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1", clDone === cl.length ? "bg-green-50 text-green-600" : "bg-gray-100 text-text-muted")}><ListChecks size={10} />{clDone}/{cl.length}</span>}
+            {cmtCount > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-text-muted flex items-center gap-1"><MessageSquare size={10} />{cmtCount}</span>}
             {t.linkedScheduleLabel && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 flex items-center gap-1" title="연결된 일정"><Link2 size={10} />{t.linkedScheduleLabel}</span>}
+            {t.linkedTripId && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 flex items-center gap-1 cursor-pointer" onClick={() => openTrip(t.linkedTripId!)} title="연결된 출장 보기"><Plane size={10} />출장</span>}
           </div>
+          {!compact && cl.length > 0 && (
+            <div className="w-full h-1 bg-surface rounded-full overflow-hidden mt-2">
+              <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${Math.round(clDone / cl.length * 100)}%` }} />
+            </div>
+          )}
           {!compact && (
             <div className="flex gap-1.5 mt-3">
               {TODO_STATUSES.filter(s => s.id !== t.status).map(s => (
@@ -2575,23 +3179,187 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
     );
   };
 
+  const inputCls = "h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color";
+  const tabBtn = (id: typeof subTab, icon: React.ReactNode, label: string) => (
+    <button onClick={() => setSubTab(id)} className={cn("px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap", subTab === id ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
+      {icon} {label}
+    </button>
+  );
+  const detailLogs = detailTodo ? logs.filter(l => l.targetType === 'todo' && l.targetId === detailTodo.id) : [];
+  const logTime = (l: ActivityLog) => { const ms = tsMillis(l.at); return ms ? format(new Date(ms), 'M/d HH:mm') : ''; };
+
   return (
     <div className="w-full">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-        <div>
-          <h2 className="font-serif text-2xl font-bold text-text-main">업무 관리</h2>
-          <p className="text-sm text-text-muted mt-1">할 일과 업무 메모를 팀과 함께 관리하세요</p>
+      {/* ===== 머리말: 제목 · 나 선택 · 내 업무만 · 검색 · 알림 ===== */}
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div>
+            <h2 className="font-serif text-2xl font-bold text-text-main">업무 관리</h2>
+            <p className="text-sm text-text-muted mt-1">할 일 · 출장 · 공문 · 메모를 팀과 함께 관리하세요</p>
+          </div>
+          <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit max-w-full shadow-sm overflow-x-auto no-scrollbar">
+            {tabBtn('board', <ListChecks size={14} />, '할 일')}
+            {tabBtn('calendar', <CalendarDays size={14} />, '캘린더')}
+            {tabBtn('notes', <ClipboardList size={14} />, '업무 메모')}
+            {tabBtn('history', <History size={14} />, '변경 기록')}
+          </div>
         </div>
-        <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit shadow-sm overflow-x-auto no-scrollbar">
-          <button onClick={() => setSubTab('board')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap", subTab === 'board' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
-            <ListChecks size={14} /> 할 일
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted/60" size={15} />
+            <input
+              type="text" value={searchText} onChange={(e) => { setSearchText(e.target.value); setAlertsOpen(false); }}
+              placeholder="할 일 · 출장 · 메모 통합 검색"
+              className="w-full h-10 pl-10 pr-9 bg-surface border border-border-color rounded-full text-sm outline-none focus:border-accent-color"
+            />
+            {searchText && <button onClick={() => setSearchText('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main"><X size={15} /></button>}
+          </div>
+          <div className="flex items-center gap-1.5 h-10 pl-3 pr-1 bg-surface border border-border-color rounded-full">
+            <UserIcon size={14} className="text-text-muted shrink-0" />
+            <select value={myTeacherId} onChange={(e) => setMyTeacherId(e.target.value)} title="이 기기를 쓰는 사람 (알림·내 업무 기준)" className="h-8 bg-transparent text-xs font-bold outline-none max-w-[110px]">
+              <option value="">나는 누구?</option>
+              {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <button
+            onClick={() => { if (!myTeacherId) { alert('먼저 옆의 "나는 누구?"에서 본인 이름을 선택해주세요.'); return; } setMyOnly(!myOnly); }}
+            className={cn("h-10 px-4 rounded-full text-xs font-bold border transition-colors whitespace-nowrap", myFilterOn ? "bg-accent-color text-on-accent border-accent-color" : "bg-surface border-border-color text-text-muted hover:text-text-main")}
+          >
+            {myFilterOn ? '✓ 내 업무만' : '내 업무만 보기'}
           </button>
-          <button onClick={() => setSubTab('calendar')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap", subTab === 'calendar' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
-            <CalendarDays size={14} /> 캘린더
+          <button
+            onClick={() => alertsOpen ? setAlertsOpen(false) : openAlerts()}
+            className={cn("relative h-10 w-10 rounded-full border flex items-center justify-center transition-colors", alertsOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-surface border-border-color text-text-main hover:bg-gray-50")}
+            title="내 업무 알림"
+          >
+            <Bell size={17} />
+            {unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>}
           </button>
-          <button onClick={() => setSubTab('notes')} className={cn("px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap", subTab === 'notes' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:text-text-main")}>
-            <ClipboardList size={14} /> 업무 메모
-          </button>
+        </div>
+
+        {/* 알림 목록 */}
+        {alertsOpen && (
+          <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-text-main flex items-center gap-2"><Bell size={15} /> 내 업무 알림{myTeacherName && <span className="text-xs font-normal text-text-muted">· {myTeacherName} 선생님</span>}</h3>
+              <button onClick={() => setAlertsOpen(false)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted"><X size={15} /></button>
+            </div>
+            {!myTeacherId ? (
+              <p className="text-xs text-text-muted py-3">위의 <b>"나는 누구?"</b>에서 본인 이름을 선택하면, 나에게 배정된 업무와 내 업무에 달린 댓글을 알려드려요.</p>
+            ) : alerts.length === 0 ? (
+              <p className="text-xs text-text-muted italic py-3">최근 30일 동안 새 알림이 없습니다.</p>
+            ) : (
+              <div className="divide-y divide-border-color">
+                {alerts.map(a => (
+                  <button key={a.id} onClick={() => openTodoDetail(a.todoId)} className={cn("w-full text-left py-2.5 px-2 rounded-lg flex items-start gap-2.5 hover:bg-gray-50 transition-colors", a.at > alertsBaseline && "bg-blue-50/60")}>
+                    <span className="mt-0.5 shrink-0">{a.kind === 'assign' ? <ListChecks size={14} className="text-accent-color" /> : <MessageSquare size={14} className="text-amber-600" />}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-semibold text-text-main truncate">{a.text}</span>
+                      <span className="block text-[11px] text-text-muted truncate">{a.sub}{a.sub ? ' · ' : ''}{format(new Date(a.at), 'M/d HH:mm')}</span>
+                    </span>
+                    {a.at > alertsBaseline && <span className="text-[9px] font-black text-red-500 shrink-0 mt-1">NEW</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 통합 검색 결과 */}
+        {searchResults && (
+          <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4 space-y-3">
+            <h3 className="text-sm font-bold text-text-main">'{searchText.trim()}' 검색 결과 <span className="text-xs font-normal text-text-muted">{searchCount}건</span></h3>
+            {searchCount === 0 && <p className="text-xs text-text-muted italic">일치하는 내용이 없습니다.</p>}
+            {searchResults.todos.length > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-text-muted mb-1">할 일</p>
+                {searchResults.todos.map(t => (
+                  <button key={t.id} onClick={() => openTodoDetail(t.id)} className="w-full text-left px-2 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                    <span className={cn("w-2 h-2 rounded-full shrink-0", todoCategoryOf(t.category).dot)} />
+                    <span className={cn("text-sm text-text-main truncate flex-1", t.status === 'done' && "line-through opacity-50")}>{t.title}</span>
+                    <span className="text-[10px] text-text-muted shrink-0">{t.dueDate || ''}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searchResults.trips.length > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-text-muted mb-1">출장</p>
+                {searchResults.trips.map(t => (
+                  <button key={t.id} onClick={() => openTrip(t.id)} className="w-full text-left px-2 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                    <Plane size={13} className="text-text-muted shrink-0" />
+                    <span className="text-sm text-text-main truncate flex-1">{t.title}{t.assigneeName ? ` · ${t.assigneeName}` : ''}</span>
+                    <span className="text-[10px] text-text-muted shrink-0">{t.startDate} ~ {t.endDate}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searchResults.memos.length > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-text-muted mb-1">날짜 메모</p>
+                {searchResults.memos.map(n => (
+                  <button key={n.id} onClick={() => { setSubTab('calendar'); setCalBaseDate(parseISO(n.date)); setCalSelectedDate(n.date); openMemo(n.date); }} className="w-full text-left px-2 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                    <StickyNote size={13} className="text-amber-600 shrink-0" />
+                    <span className="text-sm text-text-main truncate flex-1">{n.content.split('\n')[0]}</span>
+                    <span className="text-[10px] text-text-muted shrink-0">{n.date}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searchResults.notes.length > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-text-muted mb-1">업무 메모</p>
+                {searchResults.notes.map(n => (
+                  <button key={n.id} onClick={() => { setSubTab('notes'); setHighlightNoteId(n.id); setSearchText(''); setTimeout(() => document.getElementById('note-' + n.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); }} className="w-full text-left px-2 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                    <ClipboardList size={13} className="text-text-muted shrink-0" />
+                    <span className="text-sm text-text-main truncate flex-1">{n.title}</span>
+                    <span className="text-[10px] text-text-muted shrink-0">{n.authorName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== 오늘의 업무 요약 ===== */}
+        <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-text-main">{format(startOfToday(), 'M월 d일 (EEE)', { locale: ko })} 오늘의 업무{myFilterOn && <span className="text-xs font-normal text-text-muted"> · {myTeacherName} 선생님</span>}</h3>
+            {weatherDaily[today] && <span className="text-xs text-text-muted">{weatherIconOf(weatherDaily[today].code).icon} {weatherDaily[today].max}°/{weatherDaily[today].min}°</span>}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <button onClick={() => { setSubTab('board'); setQuickFilter('today'); }} className="p-3 rounded-xl bg-bg-primary border border-border-color text-left hover:border-accent-color transition-colors">
+              <p className="text-2xl font-black text-text-main">{summary.todayDue.length}</p>
+              <p className="text-[11px] font-bold text-text-muted">오늘 마감</p>
+            </button>
+            <button onClick={() => { setSubTab('board'); setQuickFilter('overdue'); }} className={cn("p-3 rounded-xl border text-left transition-colors", summary.overdue.length ? "bg-red-50 border-red-100 hover:border-red-400" : "bg-bg-primary border-border-color hover:border-accent-color")}>
+              <p className={cn("text-2xl font-black", summary.overdue.length ? "text-red-500" : "text-text-main")}>{summary.overdue.length}</p>
+              <p className="text-[11px] font-bold text-text-muted">기한 지남</p>
+            </button>
+            <button onClick={() => { setSubTab('board'); setQuickFilter('official'); }} className={cn("p-3 rounded-xl border text-left transition-colors", summary.officialSoon.length ? "bg-red-50 border-red-100 hover:border-red-400" : "bg-bg-primary border-border-color hover:border-accent-color")}>
+              <p className={cn("text-2xl font-black", summary.officialSoon.length ? "text-red-500" : "text-text-main")}>{summary.officialSoon.length}</p>
+              <p className="text-[11px] font-bold text-text-muted">공문 기한 임박 (3일)</p>
+            </button>
+            <button onClick={() => { setSubTab('calendar'); setCalBaseDate(startOfToday()); setCalSelectedDate(today); setSelectedTripId(null); }} className="p-3 rounded-xl bg-bg-primary border border-border-color text-left hover:border-accent-color transition-colors">
+              <p className="text-2xl font-black text-text-main">{summary.todayTrips.length}</p>
+              <p className="text-[11px] font-bold text-text-muted truncate">오늘 출장{summary.todayTrips.length > 0 && `: ${summary.todayTrips.map(t => t.assigneeName || t.title).join(', ')}`}</p>
+            </button>
+            <div className="p-3 rounded-xl bg-bg-primary border border-border-color col-span-2 sm:col-span-1">
+              <p className="text-2xl font-black text-text-main">{summary.todaySchedules.length}</p>
+              <p className="text-[11px] font-bold text-text-muted">오늘 수업·일정</p>
+            </div>
+          </div>
+          {summary.conflictTrips.length > 0 && (
+            <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-1">
+              <p className="text-xs font-bold text-amber-700 flex items-center gap-1.5"><AlertTriangle size={13} /> 출장 기간과 수업이 겹치는 일정이 있어요</p>
+              {summary.conflictTrips.slice(0, 4).map(({ trip, conflicts }) => (
+                <button key={trip.id} onClick={() => openTrip(trip.id)} className="block w-full text-left text-[11px] text-amber-700 hover:underline truncate">
+                  · {trip.assigneeName || '미지정'} 「{trip.title}」 {trip.startDate.slice(5)}~{trip.endDate.slice(5)} → 수업 {conflicts.length}건 ({conflicts.slice(0, 2).map(s => `${s.date.slice(5)} ${s.program}`).join(', ')}{conflicts.length > 2 ? ' …' : ''})
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2603,28 +3371,35 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                 type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') addTodo(); }}
                 placeholder="새 할 일 제목을 입력하세요"
-                className="flex-1 h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color"
+                className={cn(inputCls, "flex-1")}
               />
-              <select value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color">
+              <select value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} className={inputCls}>
                 <option value="">담당자 미지정</option>
                 {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
-              <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+              <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} className={inputCls} title="마감일 (공문은 제출 기한)" />
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color">
+              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className={inputCls}>
                 {TODO_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
               <input
                 type="text" value={newTagsText} onChange={(e) => setNewTagsText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') addTodo(); }}
                 placeholder="태그 (쉼표로 구분, 예: 긴급, 10월)"
-                className="flex-1 h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color"
+                className={cn(inputCls, "flex-1")}
               />
               <button onClick={addTodo} className="h-10 px-5 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all flex items-center gap-1.5 justify-center shrink-0">
                 <Plus size={16} /> 추가
               </button>
             </div>
+            {newCategory === 'official' && (
+              <div className="flex flex-col sm:flex-row gap-2 p-2 rounded-lg bg-red-50/60 border border-red-100">
+                <span className="text-[11px] font-bold text-red-500 shrink-0 self-center flex items-center gap-1"><FileText size={12} />공문 정보</span>
+                <input type="text" value={newDocNo} onChange={(e) => setNewDocNo(e.target.value)} placeholder="공문 번호 (예: 강원교육-12345)" className={cn(inputCls, "flex-1 h-9 bg-surface")} />
+                <input type="text" value={newDocTo} onChange={(e) => setNewDocTo(e.target.value)} placeholder="제출처 (예: 교육지원청)" className={cn(inputCls, "flex-1 h-9 bg-surface")} />
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-border-color/60 mt-1">
               <div className="flex items-center gap-2 flex-1">
                 <span className="text-[11px] font-bold text-text-muted shrink-0">반복</span>
@@ -2655,7 +3430,72 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
             </div>
           </div>
 
-          <div className="flex justify-end">
+          {/* ===== 업무 템플릿 ===== */}
+          <div className="bg-surface rounded-2xl border border-border-color shadow-sm">
+            <button onClick={() => setIsTemplateOpen(v => !v)} className="w-full px-4 py-3 flex items-center justify-between text-left">
+              <span className="text-sm font-bold text-text-main flex items-center gap-2"><Layers size={15} /> 업무 템플릿 <span className="text-xs font-normal text-text-muted">매년 반복되는 할 일 묶음을 한 번에 등록</span></span>
+              <ChevronRight size={16} className={cn("text-text-muted transition-transform", isTemplateOpen && "rotate-90")} />
+            </button>
+            {isTemplateOpen && (
+              <div className="px-4 pb-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold text-text-muted">템플릿 적용</p>
+                  {templates.length === 0 && <p className="text-xs text-text-muted italic">저장된 템플릿이 없습니다. 오른쪽에서 먼저 만들어주세요.</p>}
+                  {templates.map(tpl => (
+                    <div key={tpl.id} className={cn("p-3 rounded-xl border transition-colors", applyTplId === tpl.id ? "border-accent-color bg-blue-50/40" : "border-border-color bg-bg-primary")}>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setApplyTplId(applyTplId === tpl.id ? '' : tpl.id)} className="flex-1 text-left text-sm font-bold text-text-main">{tpl.name} <span className="text-[11px] font-normal text-text-muted">· {tpl.items.length}개 항목</span></button>
+                        <button onClick={() => deleteTemplate(tpl)} className="p-1 text-text-muted hover:text-red-500"><Trash2 size={13} /></button>
+                      </div>
+                      {applyTplId === tpl.id && (
+                        <div className="mt-2 space-y-2">
+                          <ul className="text-[11px] text-text-muted space-y-0.5">
+                            {tpl.items.map((it, i) => <li key={i}>· {it.title} <span className="opacity-70">(기준일 {it.offset >= 0 ? '+' : ''}{it.offset}일 · {todoCategoryOf(it.category).label})</span></li>)}
+                          </ul>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input type="date" value={applyDate} onChange={(e) => setApplyDate(e.target.value)} className={cn(inputCls, "h-9 bg-surface")} title="기준일" />
+                            <select value={applyAssignee} onChange={(e) => setApplyAssignee(e.target.value)} className={cn(inputCls, "h-9 bg-surface flex-1")}>
+                              <option value="">담당자 미지정</option>
+                              {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                            <button onClick={applyTemplate} className="h-9 px-4 bg-accent-color text-on-accent rounded-lg text-xs font-bold shrink-0">적용하기</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold text-text-muted">새 템플릿 만들기</p>
+                  <input type="text" value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="템플릿 이름 (예: 방학 특강 운영)" className={cn(inputCls, "w-full")} />
+                  {tplItems.map((it, i) => (
+                    <div key={i} className="flex gap-1.5 items-center">
+                      <input type="text" value={it.title} onChange={(e) => setTplItems(tplItems.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} placeholder={`할 일 ${i + 1}`} className={cn(inputCls, "h-9 flex-1 min-w-0")} />
+                      <div className="flex items-center gap-1 shrink-0" title="기준일로부터 며칠 뒤 (앞이면 음수)">
+                        <span className="text-[10px] text-text-muted">D+</span>
+                        <input type="number" value={it.offset} onChange={(e) => setTplItems(tplItems.map((x, j) => j === i ? { ...x, offset: Number(e.target.value) } : x))} className={cn(inputCls, "h-9 w-16 px-2")} />
+                      </div>
+                      <select value={it.category} onChange={(e) => setTplItems(tplItems.map((x, j) => j === i ? { ...x, category: e.target.value } : x))} className={cn(inputCls, "h-9 px-1.5 w-[84px] shrink-0")}>
+                        {TODO_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                      </select>
+                      <button onClick={() => setTplItems(tplItems.length > 1 ? tplItems.filter((_, j) => j !== i) : [{ title: '', offset: 0, category: 'etc' }])} className="p-1 text-text-muted hover:text-red-500 shrink-0"><X size={14} /></button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <button onClick={() => setTplItems([...tplItems, { title: '', offset: (tplItems[tplItems.length - 1]?.offset || 0) + 1, category: 'etc' }])} className="h-9 px-3 rounded-lg border border-dashed border-border-color text-xs font-bold text-text-muted hover:border-accent-color hover:text-accent-color flex-1">+ 항목 추가</button>
+                    <button onClick={saveTemplate} className="h-9 px-4 bg-accent-color text-on-accent rounded-lg text-xs font-bold">템플릿 저장</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {quickFilter !== 'none' ? (
+              <button onClick={() => setQuickFilter('none')} className="h-8 px-3 rounded-full bg-accent-color text-on-accent text-xs font-bold flex items-center gap-1.5">
+                필터: {quickFilter === 'today' ? '오늘 마감' : quickFilter === 'overdue' ? '기한 지남' : '진행 중인 공문'} <X size={12} />
+              </button>
+            ) : <span />}
             <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit shadow-sm">
               <button onClick={() => setBoardView('kanban')} className={cn("px-3 py-1 rounded-full text-[11px] font-bold transition-all", boardView === 'kanban' ? "bg-accent-color text-on-accent" : "text-text-muted")}>칸반 보드</button>
               <button onClick={() => setBoardView('list')} className={cn("px-3 py-1 rounded-full text-[11px] font-bold transition-all", boardView === 'list' ? "bg-accent-color text-on-accent" : "text-text-muted")}>목록</button>
@@ -2706,7 +3546,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
       {subTab === 'calendar' && (
         <div className="space-y-4">
           <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-3 sm:p-8">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-5">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4 mb-5">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between text-xs font-bold text-text-muted mb-1.5">
                   <span>{format(calBaseDate, 'M월')} 할 일 진행률</span>
@@ -2716,12 +3556,15 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                   <div className="h-full bg-accent-color rounded-full transition-all" style={{ width: `${monthProgress.pct}%` }} />
                 </div>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <button onClick={() => setIsTripFormOpen(v => !v)} className={cn("h-9 px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center flex-1 sm:flex-none", isTripFormOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
+              <div className="grid grid-cols-3 lg:flex gap-2 shrink-0">
+                <button onClick={() => setIsTripFormOpen(v => !v)} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap", isTripFormOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
                   <Plane size={14} /> 출장 등록
                 </button>
-                <button onClick={printWeeklyExport} className="h-9 px-4 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 justify-center flex-1 sm:flex-none">
-                  <Printer size={14} /> <span className="sm:hidden">이번 주 인쇄</span><span className="hidden sm:inline">이번 주 인쇄/내보내기</span>
+                <button onClick={printWeeklyExport} className="h-9 px-3 lg:px-4 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap">
+                  <Printer size={14} /> 주간 인쇄
+                </button>
+                <button onClick={printMonthlyReport} className="h-9 px-3 lg:px-4 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap">
+                  <FileText size={14} /> 월간 보고서
                 </button>
               </div>
             </div>
@@ -2750,6 +3593,19 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                     <Plus size={16} /> 등록
                   </button>
                 </div>
+                <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer select-none">
+                  <input type="checkbox" checked={tripMakeReport} onChange={(e) => setTripMakeReport(e.target.checked)} className="w-4 h-4 accent-[#344B68]" />
+                  출장 다음 날 마감으로 <b className="text-text-main">복명서 작성 할 일</b>을 자동으로 만들기
+                </label>
+                {formConflicts.length > 0 && (
+                  <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-[11px] font-bold text-amber-700 flex items-center gap-1"><AlertTriangle size={12} /> 이 기간에 출장자의 수업 {formConflicts.length}건이 겹쳐요</p>
+                    <ul className="mt-1 text-[11px] text-amber-700 space-y-0.5">
+                      {formConflicts.slice(0, 5).map(s => <li key={s.id}>· {s.date} ({s.day}) {s.startTime}~{s.endTime} {s.program} · {s.location}</li>)}
+                      {formConflicts.length > 5 && <li>· 외 {formConflicts.length - 5}건</li>}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2759,7 +3615,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
               <button onClick={() => setCalBaseDate(addMonths(calBaseDate, 1))} className="p-2.5 bg-bg-primary border border-border-color rounded-full hover:bg-gray-50 transition-colors"><ChevronRight size={18} /></button>
               <button onClick={() => setCalBaseDate(startOfToday())} className="px-4 py-2 bg-bg-primary border border-border-color rounded-full text-sm font-bold hover:bg-gray-50 transition-colors">오늘</button>
             </div>
-            <p className="text-center text-[11px] text-text-muted mb-4">날짜 칸을 <b>두 번 누르면</b> 그날의 메모를 쓸 수 있어요 · 출장 띠를 누르면 상세 정보가 보여요</p>
+            <p className="text-center text-[11px] text-text-muted mb-4">날짜 칸을 <b>두 번 누르면</b> 메모 · 출장 띠를 누르면 상세 정보<span className="hidden lg:inline"> · 할 일과 출장 띠는 <b>끌어서</b> 다른 날로 옮길 수 있어요</span></p>
 
             <div className="rounded-xl overflow-hidden border border-border-color">
               <div className="grid grid-cols-7">
@@ -2773,21 +3629,22 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                   className="grid grid-cols-7 min-h-[96px] sm:min-h-[128px]"
                   style={{ gridTemplateRows: ['auto', ...Array.from({ length: week.laneCount }, () => '20px'), '1fr'].join(' ') }}
                 >
-                  {/* 1) 날짜 칸 배경 (클릭/더블클릭 영역) */}
+                  {/* 1) 날짜 칸 배경 (클릭 · 더블클릭 · 드롭 영역) */}
                   {week.days.map((d, di) => {
-                    const dateStr = format(d, 'yyyy-MM-dd');
+                    const dateStr = week.dayStrs[di];
                     const isCurMonth = isSameMonth(d, calBaseDate);
                     return (
                       <div
                         key={'bg' + di}
                         onClick={() => handleDayTap(dateStr)}
-                        onDoubleClick={(e) => e.preventDefault()}
+                        {...dropProps(dateStr)}
                         style={{ gridColumn: di + 1, gridRow: '1 / -1' }}
                         className={cn(
                           "border-b border-r border-border-color cursor-pointer transition-colors touch-manipulation",
                           di === 6 && "border-r-0",
                           !isCurMonth ? "bg-gray-50/30" : "bg-surface hover:bg-gray-50/50",
-                          calSelectedDate === dateStr && "ring-2 ring-inset ring-accent-color"
+                          calSelectedDate === dateStr && "ring-2 ring-inset ring-accent-color",
+                          dragOverDate === dateStr && "bg-blue-50 ring-2 ring-inset ring-blue-300"
                         )}
                       />
                     );
@@ -2795,7 +3652,7 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
 
                   {/* 2) 날짜 숫자 · 공휴일 · 메모 표시 · 날씨 */}
                   {week.days.map((d, di) => {
-                    const dateStr = format(d, 'yyyy-MM-dd');
+                    const dateStr = week.dayStrs[di];
                     const isCurMonth = isSameMonth(d, calBaseDate);
                     const isToday = isSameDay(d, startOfToday());
                     const holidayName = koreanHolidays[dateStr];
@@ -2819,10 +3676,19 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                     );
                   })}
 
-                  {/* 3) 출장 띠 (여러 날을 가로지르는 막대) */}
+                  {/* 3) 출장 띠 (여러 날을 가로지르는 막대, PC에선 끌어서 이동) */}
                   {week.segs.map(seg => (
                     <div
                       key={'trip' + seg.trip.id}
+                      draggable
+                      onDragStart={(e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const span = seg.endCol - seg.startCol + 1;
+                        const idx = Math.min(span - 1, Math.max(0, Math.floor((e.clientX - rect.left) / (rect.width / span))));
+                        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'trip', id: seg.trip.id, origin: week.dayStrs[seg.startCol + idx] }));
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragEnd={() => setDragOverDate(null)}
                       onClick={(e) => { e.stopPropagation(); setSelectedTripId(seg.trip.id); setCalSelectedDate(null); }}
                       title={`${seg.trip.title}${seg.trip.assigneeName ? ' · ' + seg.trip.assigneeName : ''} (${seg.trip.startDate} ~ ${seg.trip.endDate})`}
                       style={{ gridColumn: `${seg.startCol + 1} / ${seg.endCol + 2}`, gridRow: seg.lane + 2 }}
@@ -2836,12 +3702,13 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                     >
                       <Plane size={10} className="shrink-0" />
                       <span className="truncate">{seg.contL ? '…' : ''}{seg.trip.title}{seg.trip.assigneeName ? ` · ${seg.trip.assigneeName}` : ''}</span>
+                      {tripConflicts(seg.trip.assigneeId, seg.trip.startDate, seg.trip.endDate).length > 0 && !seg.contL && <AlertTriangle size={10} className="shrink-0 ml-auto" />}
                     </div>
                   ))}
 
-                  {/* 4) 할 일 */}
+                  {/* 4) 할 일 (PC에선 끌어서 날짜 이동) */}
                   {week.days.map((d, di) => {
-                    const dateStr = format(d, 'yyyy-MM-dd');
+                    const dateStr = week.dayStrs[di];
                     const items = todosByDate[dateStr] || [];
                     return (
                       <div key={'it' + di} style={{ gridColumn: di + 1, gridRow: week.laneCount + 2 }} className="pointer-events-none relative z-10 min-w-0 px-1 sm:px-2.5 pt-1 pb-1.5 space-y-1 overflow-hidden">
@@ -2851,9 +3718,14 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                           return (
                             <div
                               key={t.id}
-                              title={t.title}
+                              title={`${t.title}${t.assigneeName ? ' · ' + t.assigneeName : ''}`}
+                              draggable
+                              onDragStart={(e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'todo', id: t.id })); e.dataTransfer.effectAllowed = 'move'; }}
+                              onDragEnd={() => setDragOverDate(null)}
+                              onClick={() => handleDayTap(dateStr)}
+                              {...dropProps(dateStr)}
                               className={cn(
-                                "px-1 sm:px-1.5 py-0.5 sm:py-1 text-[9px] font-bold rounded border truncate flex items-center gap-1",
+                                "lg:pointer-events-auto lg:cursor-grab lg:active:cursor-grabbing px-1 sm:px-1.5 py-0.5 sm:py-1 text-[9px] font-bold rounded border truncate flex items-center gap-1",
                                 t.status === 'done' ? "bg-gray-50 text-gray-400 border-gray-100 line-through" : overdue ? "bg-red-50 text-red-600 border-red-200" : cn(cat.bg, cat.text, cat.border)
                               )}
                             >
@@ -2873,23 +3745,61 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
             </div>
           </div>
 
-          {selectedTrip && (
-            <div className="bg-surface rounded-2xl border border-border-color p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-text-main flex items-center gap-2"><span className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0", tripColorOf(selectedTrip))}><Plane size={11} /></span>{selectedTrip.title}</h3>
-                  <p className="text-xs text-text-muted mt-1">{selectedTrip.startDate} ~ {selectedTrip.endDate} · {tripNights(selectedTrip)}</p>
+          {selectedTrip && (() => {
+            const conflicts = tripConflicts(selectedTrip.assigneeId, selectedTrip.startDate, selectedTrip.endDate);
+            const reportTodos = todos.filter(t => t.linkedTripId === selectedTrip.id);
+            return (
+              <div className="bg-surface rounded-2xl border border-border-color p-5 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-text-main flex items-center gap-2"><span className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0", tripColorOf(selectedTrip))}><Plane size={11} /></span>{selectedTrip.title}</h3>
+                    <p className="text-xs text-text-muted mt-1">{selectedTrip.startDate} ~ {selectedTrip.endDate} · {tripNights(selectedTrip)}</p>
+                  </div>
+                  <button onClick={() => setSelectedTripId(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted transition-colors shrink-0"><X size={16} /></button>
                 </div>
-                <button onClick={() => setSelectedTripId(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted transition-colors shrink-0"><X size={16} /></button>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedTrip.assigneeName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-accent-color">{selectedTrip.assigneeName}</span>}
+                  {selectedTrip.place && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-text-muted flex items-center gap-1"><MapPin size={10} />{selectedTrip.place}</span>}
+                  {selectedTrip.authorName && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-text-muted">등록: {selectedTrip.authorName}</span>}
+                </div>
+
+                {conflicts.length > 0 && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                    <p className="text-xs font-bold text-amber-700 flex items-center gap-1.5"><AlertTriangle size={13} /> 출장 기간에 겹치는 수업 {conflicts.length}건 · 대체 수업이나 일정 조정이 필요해요</p>
+                    <ul className="mt-1.5 text-[11px] text-amber-700 space-y-0.5">
+                      {conflicts.map(s => <li key={s.id}>· {s.date} ({s.day}) {s.startTime}~{s.endTime} {s.program} · {s.location} · {s.target}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-text-muted">기간 변경</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input type="date" value={tripEditStart} onChange={(e) => { setTripEditStart(e.target.value); if (tripEditEnd < e.target.value) setTripEditEnd(e.target.value); }} className={cn(inputCls, "h-9")} />
+                    <input type="date" value={tripEditEnd} min={tripEditStart} onChange={(e) => setTripEditEnd(e.target.value)} className={cn(inputCls, "h-9")} />
+                    <button onClick={() => shiftTrip(selectedTrip, tripEditStart, tripEditEnd)} disabled={tripEditStart === selectedTrip.startDate && tripEditEnd === selectedTrip.endDate} className="h-9 px-4 rounded-lg text-xs font-bold bg-bg-primary border border-border-color hover:border-accent-color disabled:opacity-40">기간 저장</button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-text-muted">복명서</p>
+                  {reportTodos.length === 0 ? (
+                    <p className="text-xs text-text-muted italic">연결된 복명서 할 일이 없습니다.</p>
+                  ) : reportTodos.map(t => <TodoRow key={t.id} t={t} compact />)}
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-text-muted">출장 결과 메모 <span className="font-normal">(복명서 작성용)</span></p>
+                  <textarea value={tripResultDraft} onChange={(e) => setTripResultDraft(e.target.value)} rows={4} placeholder="주요 내용, 협의 결과, 후속 조치 등을 적어두세요" className="w-full p-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color resize-none" />
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => saveTripResult(selectedTrip)} disabled={tripResultDraft === (selectedTrip.result || '')} className="h-8 px-4 rounded-lg text-xs font-bold bg-accent-color text-on-accent disabled:opacity-40">결과 저장</button>
+                    <div className="flex-1" />
+                    <button onClick={() => deleteTrip(selectedTrip.id)} className="h-8 px-3 rounded-lg text-xs font-bold text-red-500 border border-red-100 hover:bg-red-50 transition-colors flex items-center gap-1.5"><Trash2 size={13} /> 출장 삭제</button>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {selectedTrip.assigneeName && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-accent-color">{selectedTrip.assigneeName}</span>}
-                {selectedTrip.place && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-text-muted flex items-center gap-1"><MapPin size={10} />{selectedTrip.place}</span>}
-                {selectedTrip.authorName && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-text-muted">등록: {selectedTrip.authorName}</span>}
-              </div>
-              <button onClick={() => deleteTrip(selectedTrip.id)} className="h-8 px-3 rounded-lg text-xs font-bold text-red-500 border border-red-100 hover:bg-red-50 transition-colors flex items-center gap-1.5"><Trash2 size={13} /> 출장 삭제</button>
-            </div>
-          )}
+            );
+          })()}
 
           {calSelectedDate && (
             <div className="bg-surface rounded-2xl border border-amber-200 p-5 shadow-sm space-y-4">
@@ -2934,7 +3844,66 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
         </div>
       )}
 
-      {/* 날짜 메모 창 (날짜 칸 더블클릭 / 두 번 터치) */}
+      {subTab === 'notes' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1 bg-surface rounded-2xl border border-border-color p-5 shadow-sm h-fit space-y-3">
+            <h3 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Plus size={14} /> 새 메모 작성</h3>
+            <input type="text" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} placeholder="제목" className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
+            <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="업무 관련 내용을 적어주세요" rows={6} className="w-full p-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color resize-none" />
+            <button onClick={addNote} className="w-full h-10 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all">메모 남기기</button>
+          </div>
+          <div className="lg:col-span-2 space-y-3">
+            {notes.length === 0 && <div className="p-10 text-center text-text-muted text-sm bg-surface rounded-2xl border border-border-color">아직 남겨진 메모가 없습니다.</div>}
+            {notes.map(n => (
+              <div key={n.id} id={'note-' + n.id} className={cn("bg-surface rounded-2xl border p-5 shadow-sm group transition-colors", highlightNoteId === n.id ? "border-accent-color ring-2 ring-accent-color/30" : "border-border-color")}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h4 className="text-sm font-bold text-text-main">{n.title}</h4>
+                  <button onClick={() => deleteNote(n.id)} className="lg:opacity-0 lg:group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><Trash2 size={14} /></button>
+                </div>
+                <p className="text-sm text-text-muted whitespace-pre-wrap leading-relaxed">{n.content}</p>
+                <div className="flex items-center gap-1.5 mt-3 text-[10px] text-text-muted"><UserIcon size={11} /><span className="font-bold">{n.authorName}</span><span>· {n.createdAt?.toDate ? format(n.createdAt.toDate(), 'yyyy-MM-dd HH:mm') : ''}</span></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {subTab === 'history' && (
+        <div className="bg-surface rounded-2xl border border-border-color shadow-sm p-4 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h3 className="text-sm font-bold text-text-main flex items-center gap-2"><History size={15} /> 변경 기록 <span className="text-xs font-normal text-text-muted">누가 언제 무엇을 바꿨는지 (최근 300건)</span></h3>
+            <select value={logFilter} onChange={(e) => setLogFilter(e.target.value as typeof logFilter)} className="h-9 px-3 bg-bg-primary border border-border-color rounded-full text-xs font-bold outline-none">
+              <option value="all">전체</option>
+              {(Object.keys(LOG_TYPE_LABEL) as ActivityLog['targetType'][]).map(k => <option key={k} value={k}>{LOG_TYPE_LABEL[k]}</option>)}
+            </select>
+          </div>
+          {filteredLogs.length === 0 ? (
+            <p className="text-xs text-text-muted italic py-6 text-center">아직 기록이 없습니다. 지금부터 추가·수정·삭제가 기록됩니다.</p>
+          ) : (
+            <div className="divide-y divide-border-color">
+              {filteredLogs.map(l => {
+                const clickable = (l.targetType === 'todo' && todos.some(t => t.id === l.targetId)) || (l.targetType === 'trip' && trips.some(t => t.id === l.targetId));
+                return (
+                  <div
+                    key={l.id}
+                    onClick={() => { if (!clickable) return; if (l.targetType === 'todo') openTodoDetail(l.targetId); else openTrip(l.targetId); }}
+                    className={cn("py-2.5 flex items-start gap-3", clickable && "cursor-pointer hover:bg-gray-50 rounded-lg px-1 -mx-1")}
+                  >
+                    <span className="text-[10px] text-text-muted w-[68px] shrink-0 pt-0.5">{logTime(l)}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-text-muted shrink-0">{LOG_TYPE_LABEL[l.targetType] || l.targetType}</span>
+                    <span className="flex-1 min-w-0 text-sm text-text-main">
+                      <b className="font-semibold">{l.title}</b> <span className="text-text-muted">— {l.action}</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-text-muted shrink-0">{l.by}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== 날짜 메모 창 (날짜 칸 더블클릭 / 두 번 터치) ===== */}
       <AnimatePresence>
         {memoDate && (
           <motion.div
@@ -2976,29 +3945,151 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
         )}
       </AnimatePresence>
 
-      {subTab === 'notes' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1 bg-surface rounded-2xl border border-border-color p-5 shadow-sm h-fit space-y-3">
-            <h3 className="text-xs font-bold text-text-main uppercase flex items-center gap-2"><Plus size={14} /> 새 메모 작성</h3>
-            <input type="text" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} placeholder="제목" className="w-full h-10 px-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color" />
-            <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="업무 관련 내용을 적어주세요" rows={6} className="w-full p-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color resize-none" />
-            <button onClick={addNote} className="w-full h-10 bg-accent-color text-on-accent rounded-lg text-sm font-bold hover:opacity-90 transition-all">메모 남기기</button>
-          </div>
-          <div className="lg:col-span-2 space-y-3">
-            {notes.length === 0 && <div className="p-10 text-center text-text-muted text-sm bg-surface rounded-2xl border border-border-color">아직 남겨진 메모가 없습니다.</div>}
-            {notes.map(n => (
-              <div key={n.id} className="bg-surface rounded-2xl border border-border-color p-5 shadow-sm group">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <h4 className="text-sm font-bold text-text-main">{n.title}</h4>
-                  <button onClick={() => deleteNote(n.id)} className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-all shrink-0"><Trash2 size={14} /></button>
-                </div>
-                <p className="text-sm text-text-muted whitespace-pre-wrap leading-relaxed">{n.content}</p>
-                <div className="flex items-center gap-1.5 mt-3 text-[10px] text-text-muted"><UserIcon size={11} /><span className="font-bold">{n.authorName}</span><span>· {n.createdAt?.toDate ? format(n.createdAt.toDate(), 'yyyy-MM-dd HH:mm') : ''}</span></div>
+      {/* ===== 할 일 상세 창 (체크리스트 · 댓글 · 공문 정보 · 변경 기록) ===== */}
+      <AnimatePresence>
+        {detailTodo && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setDetailTodoId(null)}
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[150] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto overscroll-contain bg-surface border border-border-color rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 select-text space-y-5"
+              style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+            >
+              <div className="flex items-start gap-2">
+                <input value={dTitle} onChange={(e) => setDTitle(e.target.value)} className="flex-1 min-w-0 font-serif text-lg font-bold text-text-main bg-transparent outline-none border-b border-transparent focus:border-accent-color py-1" />
+                <button onClick={() => setDetailTodoId(null)} className="p-1.5 rounded-full hover:bg-gray-50 text-text-muted shrink-0"><X size={18} /></button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-bold text-text-muted">상태</span>
+                  <select value={detailTodo.status} onChange={(e) => moveTodo(detailTodo.id, e.target.value as Todo['status'])} className={cn(inputCls, "w-full h-9 px-2")}>
+                    {TODO_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-bold text-text-muted">분류</span>
+                  <select value={dCategory} onChange={(e) => setDCategory(e.target.value)} className={cn(inputCls, "w-full h-9 px-2")}>
+                    {TODO_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-bold text-text-muted">담당자</span>
+                  <select value={dAssignee} onChange={(e) => setDAssignee(e.target.value)} className={cn(inputCls, "w-full h-9 px-2")}>
+                    <option value="">미지정</option>
+                    {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-bold text-text-muted">{dCategory === 'official' ? '제출 기한' : '마감일'}{(() => { const n = daysUntil(dDue); return n !== null && detailTodo.status !== 'done' ? ` · ${ddayLabel(n)}` : ''; })()}</span>
+                  <input type="date" value={dDue} onChange={(e) => setDDue(e.target.value)} className={cn(inputCls, "w-full h-9 px-2")} />
+                </label>
+              </div>
+
+              {dCategory === 'official' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-xl bg-red-50/60 border border-red-100">
+                  <label className="space-y-1">
+                    <span className="text-[10px] font-bold text-red-500 flex items-center gap-1"><FileText size={11} />공문 번호</span>
+                    <input value={dDocNo} onChange={(e) => setDDocNo(e.target.value)} placeholder="예: 강원교육-12345" className={cn(inputCls, "w-full h-9 bg-surface")} />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[10px] font-bold text-red-500">제출처</span>
+                    <input value={dDocTo} onChange={(e) => setDDocTo(e.target.value)} placeholder="예: 교육지원청" className={cn(inputCls, "w-full h-9 bg-surface")} />
+                  </label>
+                </div>
+              )}
+
+              <label className="block space-y-1">
+                <span className="text-[10px] font-bold text-text-muted">메모</span>
+                <textarea value={dNote} onChange={(e) => setDNote(e.target.value)} rows={3} placeholder="세부 내용, 참고 사항" className="w-full p-3 bg-bg-primary border border-border-color rounded-lg text-sm outline-none focus:border-accent-color resize-none" />
+              </label>
+
+              <div className="flex items-center gap-2">
+                <button onClick={() => deleteTodo(detailTodo.id)} className="h-9 px-3 rounded-lg text-xs font-bold text-red-500 border border-red-100 hover:bg-red-50 flex items-center gap-1.5"><Trash2 size={13} /> 삭제</button>
+                <div className="flex-1" />
+                <button onClick={saveTodoDetail} className="h-9 px-5 rounded-lg text-sm font-bold bg-accent-color text-on-accent hover:opacity-90">저장</button>
+              </div>
+
+              {/* 체크리스트 */}
+              <div className="space-y-2 pt-4 border-t border-border-color">
+                {(() => {
+                  const cl = detailTodo.checklist || [];
+                  const done = cl.filter(c => c.done).length;
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-bold text-text-main flex items-center gap-1.5"><ListChecks size={14} /> 체크리스트</p>
+                        {cl.length > 0 && <span className="text-[11px] font-bold text-text-muted">{done}/{cl.length} ({Math.round(done / cl.length * 100)}%)</span>}
+                      </div>
+                      {cl.length > 0 && (
+                        <div className="w-full h-1.5 bg-bg-primary rounded-full overflow-hidden">
+                          <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${Math.round(done / cl.length * 100)}%` }} />
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        {cl.map(item => (
+                          <div key={item.id} className="flex items-center gap-2 group/item py-1">
+                            <button
+                              onClick={() => updateChecklist(detailTodo, cl.map(c => c.id === item.id ? { ...c, done: !c.done } : c))}
+                              className={cn("w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all", item.done ? "bg-green-500 border-green-500" : "border-border-color hover:border-accent-color")}
+                            >
+                              {item.done && <span className="text-white text-[10px] font-bold">✓</span>}
+                            </button>
+                            <span className={cn("flex-1 text-sm text-text-main", item.done && "line-through opacity-50")}>{item.text}</span>
+                            <button onClick={() => updateChecklist(detailTodo, cl.filter(c => c.id !== item.id))} className="lg:opacity-0 lg:group-hover/item:opacity-100 text-text-muted hover:text-red-500 shrink-0"><X size={13} /></button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input value={dChecklistText} onChange={(e) => setDChecklistText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) addChecklistItem(); }} placeholder="세부 항목 추가 (예: 버스 예약)" className={cn(inputCls, "flex-1 h-9")} />
+                        <button onClick={addChecklistItem} className="h-9 px-3 rounded-lg text-xs font-bold bg-bg-primary border border-border-color hover:border-accent-color"><Plus size={14} /></button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* 댓글 */}
+              <div className="space-y-2 pt-4 border-t border-border-color">
+                <p className="text-xs font-bold text-text-main flex items-center gap-1.5"><MessageSquare size={14} /> 댓글 <span className="font-normal text-text-muted">· 담당자에게 알림이 가요</span></p>
+                {(commentsByTodo[detailTodo.id] || []).length === 0 && <p className="text-xs text-text-muted italic">아직 댓글이 없습니다.</p>}
+                <div className="space-y-2">
+                  {(commentsByTodo[detailTodo.id] || []).map(c => (
+                    <div key={c.id} className="p-2.5 rounded-xl bg-bg-primary group/cmt">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[11px] font-bold text-text-main">{c.authorName}</span>
+                        <span className="text-[10px] text-text-muted">{tsMillis(c.createdAt) ? format(new Date(tsMillis(c.createdAt)), 'M/d HH:mm') : ''}</span>
+                        <div className="flex-1" />
+                        {c.authorName === authorName && <button onClick={() => deleteComment(c.id)} className="lg:opacity-0 lg:group-hover/cmt:opacity-100 text-text-muted hover:text-red-500"><X size={12} /></button>}
+                      </div>
+                      <p className="text-sm text-text-main whitespace-pre-wrap">{c.text}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input value={dCommentText} onChange={(e) => setDCommentText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) addComment(); }} placeholder="댓글을 입력하세요" className={cn(inputCls, "flex-1 h-9")} />
+                  <button onClick={addComment} className="h-9 px-4 rounded-lg text-xs font-bold bg-accent-color text-on-accent">등록</button>
+                </div>
+              </div>
+
+              {/* 변경 기록 */}
+              <div className="space-y-1.5 pt-4 border-t border-border-color">
+                <p className="text-xs font-bold text-text-main flex items-center gap-1.5"><History size={14} /> 변경 기록</p>
+                {detailLogs.length === 0 ? (
+                  <p className="text-xs text-text-muted italic">기록이 없습니다.</p>
+                ) : detailLogs.slice(0, 20).map(l => (
+                  <p key={l.id} className="text-[11px] text-text-muted"><span className="inline-block w-[68px]">{logTime(l)}</span><b className="text-text-main">{l.by}</b> · {l.action}</p>
+                ))}
+                <p className="text-[10px] text-text-muted pt-1">등록: {detailTodo.createdBy || '알 수 없음'}{tsMillis(detailTodo.createdAt) ? ` · ${format(new Date(tsMillis(detailTodo.createdAt)), 'yyyy-MM-dd HH:mm')}` : ''}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
