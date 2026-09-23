@@ -34,7 +34,8 @@ import {
   Layers,
   FileText,
   MessageSquare,
-  AlertTriangle
+  AlertTriangle,
+  Download
 } from 'lucide-react';
 import { 
   collection, 
@@ -235,6 +236,40 @@ function applyAccentColor(hex: string) {
   document.documentElement.style.setProperty('--c-accent-color', hexToRgbTriplet(hex));
   document.documentElement.style.setProperty('--c-on-accent', readableOnColor(hex));
 }
+
+// ---------- 파일 내려받기 · 백업 도우미 ----------
+const downloadFile = (filename: string, content: string, mime: string) => {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+};
+const BACKUP_COLLECTIONS = ['schedules', 'teachers', 'todos', 'todoComments', 'todoTemplates', 'handoffNotes', 'dayNotes', 'trips', 'system_notifications', 'gnEntryTeachers', 'settings', 'activityLog', 'registered_users'];
+// 복원할 때 건너뛰는 컬렉션 (삭제했던 계정이 되살아나지 않도록)
+const RESTORE_SKIP = ['registered_users'];
+const encodeBackupValue = (v: any): any => {
+  if (v instanceof Timestamp) return { __ts: v.toMillis() };
+  if (Array.isArray(v)) return v.map(encodeBackupValue);
+  if (v && typeof v === 'object') { const o: any = {}; Object.keys(v).forEach(k => { o[k] = encodeBackupValue(v[k]); }); return o; }
+  return v;
+};
+const decodeBackupValue = (v: any): any => {
+  if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 1 && typeof v.__ts === 'number') return Timestamp.fromMillis(v.__ts);
+  if (Array.isArray(v)) return v.map(decodeBackupValue);
+  if (v && typeof v === 'object') { const o: any = {}; Object.keys(v).forEach(k => { o[k] = decodeBackupValue(v[k]); }); return o; }
+  return v;
+};
+const csvCell = (v: any) => {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const toCsv = (header: string[], rows: any[][]) => '\uFEFF' + [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+const tsText = (v: any) => (v && typeof v.toDate === 'function') ? format(v.toDate(), 'yyyy-MM-dd HH:mm') : '';
 
 export default function App() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -486,6 +521,98 @@ export default function App() {
       else showNotify('아직 승인되지 않았습니다. 관리자에게 승인을 요청해주세요.');
     } catch { showNotify('아직 승인되지 않았습니다.'); }
   };
+
+  // ---------- 데이터 백업 · 내보내기 (관리자) ----------
+  const [lastBackup, setLastBackup] = useState<{ at: number; by: string } | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [csvTarget, setCsvTarget] = useState<'schedules' | 'todos' | 'trips' | 'dayNotes' | 'handoffNotes'>('schedules');
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin || !canRead) return;
+    return onSnapshot(doc(db, 'settings', 'backup'), (snap) => {
+      const d = snap.data();
+      setLastBackup(d?.lastBackupAt?.toMillis ? { at: d.lastBackupAt.toMillis(), by: d.by || '' } : null);
+    }, err => console.warn('backup info error', err));
+  }, [isAdmin, canRead]);
+
+  const exportBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const out: Record<string, { id: string; data: any }[]> = {};
+      let total = 0;
+      for (const name of BACKUP_COLLECTIONS) {
+        try {
+          const snap = await getDocs(collection(db, name));
+          out[name] = snap.docs.map(d => ({ id: d.id, data: encodeBackupValue(d.data()) }));
+          total += snap.size;
+        } catch (e) { console.warn('backup skip', name, e); out[name] = []; }
+      }
+      const payload = { app: 'edu-scheduler-premium', version: 2, exportedAt: new Date().toISOString(), exportedBy: user?.email || '', collections: out };
+      downloadFile(`업무수첩-백업-${format(new Date(), 'yyyyMMdd-HHmm')}.json`, JSON.stringify(payload, null, 1), 'application/json');
+      await setDoc(doc(db, 'settings', 'backup'), { lastBackupAt: Timestamp.now(), by: user?.displayName || user?.email || '' }).catch(() => {});
+      showNotify(`백업 완료: 문서 ${total}개를 파일로 저장했습니다.`);
+    } catch (err) { console.error(err); showNotify('백업 중 오류가 발생했습니다.'); }
+    finally { setBackupBusy(false); }
+  };
+
+  const exportCsv = async () => {
+    setBackupBusy(true);
+    try {
+      const snap = await getDocs(collection(db, csvTarget));
+      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      let header: string[] = []; let body: any[][] = []; let label = '';
+      if (csvTarget === 'schedules') {
+        label = '수업일정';
+        header = ['날짜', '요일', '시작', '종료', '프로그램', '장소', '대상', '담당 교사', '종류'];
+        body = rows.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)).map(r => [r.date, r.day, r.startTime, r.endTime, r.program, r.location, r.target, r.teacherName, categoryOf(r.category).label]);
+      } else if (csvTarget === 'todos') {
+        label = '할일';
+        const st: Record<string, string> = { todo: '할 일', doing: '진행 중', done: '완료' };
+        header = ['마감일', '제목', '상태', '분류', '담당자', '공문 번호', '제출처', '태그', '체크리스트', '메모', '등록자', '등록일'];
+        body = rows.sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999')).map(r => [r.dueDate || '', r.title, st[r.status] || r.status, todoCategoryOf(r.category).label, r.assigneeName || '', r.docNo || '', r.docTo || '', (r.tags || []).join(' '), (r.checklist || []).map((c: any) => `${c.done ? '[v]' : '[ ]'} ${c.text}`).join(' / '), r.note || '', r.createdBy || '', tsText(r.createdAt)]);
+      } else if (csvTarget === 'trips') {
+        label = '출장';
+        header = ['시작일', '종료일', '출장명', '출장자', '장소', '결과', '등록자'];
+        body = rows.sort((a, b) => a.startDate.localeCompare(b.startDate)).map(r => [r.startDate, r.endDate, r.title, r.assigneeName || '', r.place || '', r.result || '', r.authorName || '']);
+      } else if (csvTarget === 'dayNotes') {
+        label = '날짜메모';
+        header = ['날짜', '내용', '작성자', '수정일'];
+        body = rows.sort((a, b) => a.date.localeCompare(b.date)).map(r => [r.date, r.content, r.authorName || '', tsText(r.updatedAt)]);
+      } else {
+        label = '업무메모';
+        header = ['작성일', '제목', '내용', '작성자'];
+        body = rows.sort((a, b) => tsText(a.createdAt).localeCompare(tsText(b.createdAt))).map(r => [tsText(r.createdAt), r.title, r.content, r.authorName || '']);
+      }
+      downloadFile(`업무수첩-${label}-${format(new Date(), 'yyyyMMdd')}.csv`, toCsv(header, body), 'text/csv;charset=utf-8');
+      showNotify(`${label} ${body.length}건을 엑셀용 파일로 저장했습니다.`);
+    } catch (err) { console.error(err); showNotify('내보내기 중 오류가 발생했습니다.'); }
+    finally { setBackupBusy(false); }
+  };
+
+  const restoreBackup = async (file: File) => {
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (parsed?.app !== 'edu-scheduler-premium' || !parsed.collections) { alert('이 앱의 백업 파일이 아닙니다.'); return; }
+      const names = Object.keys(parsed.collections).filter(n => BACKUP_COLLECTIONS.includes(n) && !RESTORE_SKIP.includes(n));
+      const summary = names.map(n => `· ${n}: ${(parsed.collections[n] || []).length}개`).join('\n');
+      if (!window.confirm(`백업 파일(${parsed.exportedAt ? parsed.exportedAt.slice(0, 16).replace('T', ' ') : '날짜 모름'})을 복원할까요?\n\n${summary}\n\n· 백업에 있는 문서는 백업 당시 내용으로 덮어씁니다.\n· 백업 이후 새로 만든 문서는 지워지지 않고 그대로 남습니다.\n· 계정 목록(registered_users)은 복원하지 않습니다.`)) return;
+      setBackupBusy(true);
+      let written = 0;
+      for (const name of names) {
+        const docs: { id: string; data: any }[] = parsed.collections[name] || [];
+        for (let i = 0; i < docs.length; i += 400) {
+          const batch = writeBatch(db);
+          docs.slice(i, i + 400).forEach(d => { if (d && d.id) batch.set(doc(db, name, d.id), decodeBackupValue(d.data || {})); });
+          await batch.commit();
+          written += Math.min(400, docs.length - i);
+        }
+      }
+      showNotify(`복원 완료: 문서 ${written}개를 되살렸습니다.`);
+    } catch (err) { console.error(err); alert('복원 중 오류가 발생했습니다. 파일이 손상되지 않았는지 확인해주세요.'); }
+    finally { setBackupBusy(false); if (restoreInputRef.current) restoreInputRef.current.value = ''; }
+  };
+  const backupAgeDays = lastBackup ? Math.floor((Date.now() - lastBackup.at) / 86400000) : null;
 
   useEffect(() => {
     if (!canRead) return;
@@ -937,7 +1064,8 @@ export default function App() {
 
   const deleteTeacher = async (id: string) => {
     const teacher = teachers.find(t => t.id === id);
-    if (!window.confirm(`'${teacher?.name}' 교사를 명단에서 삭제하시겠습니까?`)) return;
+    const linkedClasses = schedules.filter(s => s.teacherId === id).length;
+    if (!window.confirm(`'${teacher?.name}' 교사를 명단에서 삭제하시겠습니까?${linkedClasses ? `\n\n이 선생님께 배정된 수업 ${linkedClasses}건은 삭제되지 않고 이름만 남습니다.` : ''}\n(할 일 · 출장의 담당자 표시도 이름만 남습니다)`)) return;
     try {
       await deleteDoc(doc(db, 'teachers', id));
       showNotify('교사가 삭제되었습니다.');
@@ -966,6 +1094,10 @@ export default function App() {
           count++;
         }
       });
+      // 할 일 · 출장의 담당자 이름도 함께 변경
+      const [todoSnap, tripSnap] = await Promise.all([getDocs(collection(db, 'todos')), getDocs(collection(db, 'trips'))]);
+      todoSnap.forEach(d => { if (d.data().assigneeId === id) { batch.update(d.ref, { assigneeName: trimmedName }); count++; } });
+      tripSnap.forEach(d => { if (d.data().assigneeId === id) { batch.update(d.ref, { assigneeName: trimmedName }); count++; } });
       
       if (count > 0) await batch.commit();
       
@@ -1188,7 +1320,7 @@ export default function App() {
           <div className="mt-auto pt-6 px-4 space-y-4">
             <div className="bg-bg-primary/50 border border-border-color/50 rounded-xl p-3">
               <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest opacity-50 mb-1">Version</p>
-              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.9.1</p>
+              <p className="text-xs font-black text-accent-color tracking-tighter">Premium v2.9.2</p>
             </div>
             
             <div className="space-y-3">
@@ -2104,6 +2236,32 @@ export default function App() {
                         </div>
                       </section>
                       
+                      <section className="space-y-3 pt-4 border-t border-border-color">
+                        <h4 className="text-xs font-bold text-text-main flex items-center gap-2"><Download size={14} />데이터 백업 · 내보내기</h4>
+                        <p className={cn("text-[11px] font-bold", backupAgeDays === null || backupAgeDays > 30 ? "text-red-500" : "text-text-muted")}>
+                          {lastBackup ? `마지막 백업: ${format(new Date(lastBackup.at), 'yyyy-MM-dd HH:mm')} (${backupAgeDays === 0 ? '오늘' : `${backupAgeDays}일 전`}${lastBackup.by ? ` · ${lastBackup.by}` : ''})` : '아직 백업한 적이 없습니다.'}
+                          {(backupAgeDays === null || backupAgeDays > 30) && ' · 한 달에 한 번은 백업해 두세요!'}
+                        </p>
+                        <button onClick={exportBackup} disabled={backupBusy} className="w-full h-10 rounded-xl bg-accent-color text-on-accent text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+                          <Download size={14} /> {backupBusy ? '처리 중…' : '전체 백업 파일 받기 (.json)'}
+                        </button>
+                        <div className="flex gap-2">
+                          <select value={csvTarget} onChange={(e) => setCsvTarget(e.target.value as typeof csvTarget)} className="flex-1 h-9 px-2 bg-bg-primary border border-border-color rounded-xl text-xs font-bold outline-none">
+                            <option value="schedules">수업 일정</option>
+                            <option value="todos">할 일 · 공문</option>
+                            <option value="trips">출장</option>
+                            <option value="dayNotes">날짜 메모</option>
+                            <option value="handoffNotes">업무 메모</option>
+                          </select>
+                          <button onClick={exportCsv} disabled={backupBusy} className="px-3 h-9 rounded-xl border border-border-color text-xs font-bold hover:border-accent-color disabled:opacity-50 whitespace-nowrap">엑셀용 받기 (.csv)</button>
+                        </div>
+                        <div className="pt-1">
+                          <input ref={restoreInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) restoreBackup(f); }} />
+                          <button onClick={() => restoreInputRef.current?.click()} disabled={backupBusy} className="w-full h-9 rounded-xl border border-dashed border-border-color text-[11px] font-bold text-text-muted hover:text-red-500 hover:border-red-300 disabled:opacity-50">백업 파일로 복원하기…</button>
+                          <p className="text-[10px] text-text-muted mt-1.5 leading-relaxed">백업 파일은 컴퓨터나 구글 드라이브 등 안전한 곳에 보관하세요. 파일에는 모든 업무 내용이 들어 있으니 다른 사람과 공유하지 마세요.</p>
+                        </div>
+                      </section>
+
                       <section className="space-y-4 pt-4 border-t border-border-color">
                         <h4 className="text-xs font-bold text-text-main flex items-center gap-2 mb-3"><MapPin size={14} />디오라마 링크 관리</h4>
                         <div className="space-y-3">
@@ -2361,6 +2519,19 @@ const daysUntil = (due?: string | null): number | null => {
 };
 const ddayLabel = (n: number) => n === 0 ? 'D-day' : n > 0 ? `D-${n}` : `D+${-n}`;
 const escHtml = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// ---------- 휴대폰 캘린더(.ics) 도우미 ----------
+const icsText = (s: string) => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const icsFold = (line: string) => {
+  const chars = Array.from(line);
+  if (chars.length <= 60) return line;
+  const parts: string[] = [];
+  for (let i = 0; i < chars.length; i += 60) parts.push((i === 0 ? '' : ' ') + chars.slice(i, i + 60).join(''));
+  return parts.join('\r\n');
+};
+const icsDate = (d: string) => d.replace(/-/g, '');
+const icsDateTime = (d: string, hm: string) => `${icsDate(d)}T${(hm || '00:00').replace(':', '')}00`;
+const icsNextDay = (d: string) => format(addDays(parseISO(d), 1), 'yyyyMMdd');
+
 const logActivity = async (entry: Omit<ActivityLog, 'id' | 'at'>) => {
   try { await addDoc(collection(db, 'activityLog'), { ...entry, at: Timestamp.now() }); }
   catch (err) { console.warn('activity log failed', err); }
@@ -3106,6 +3277,82 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
   }, [searchText, todos, trips, dayNotes, notes]);
   const searchCount = searchResults ? searchResults.todos.length + searchResults.trips.length + searchResults.memos.length + searchResults.notes.length : 0;
 
+  // ---------- 휴대폰 캘린더로 내보내기 (.ics) ----------
+  const [isIcsOpen, setIsIcsOpen] = useState(false);
+  const [icsWho, setIcsWho] = useState<'me' | 'all'>('me');
+  const [icsClasses, setIcsClasses] = useState(true);
+  const [icsTrips, setIcsTrips] = useState(true);
+  const [icsTodos, setIcsTodos] = useState(true);
+  const [icsAlarm, setIcsAlarm] = useState(true);
+  const [icsMonths, setIcsMonths] = useState(3);
+
+  const exportIcs = () => {
+    if (icsWho === 'me' && !myTeacherId) { alert('먼저 위쪽 "나는 누구?"에서 본인 이름을 선택해주세요.'); return; }
+    const from = format(addDays(startOfToday(), -7), 'yyyy-MM-dd');
+    const to = format(addMonths(startOfToday(), icsMonths), 'yyyy-MM-dd');
+    const mine = (id?: string | null) => icsWho === 'all' || id === myTeacherId;
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const ev: string[] = [];
+    const push = (lines: string[]) => { ev.push('BEGIN:VEVENT', ...lines, `DTSTAMP:${stamp}`, 'END:VEVENT'); };
+    let count = 0;
+
+    if (icsClasses) {
+      schedules.filter(sc => sc.date >= from && sc.date <= to && mine(sc.teacherId)).forEach(sc => {
+        count++;
+        push([
+          `UID:class-${sc.id}@edu-scheduler`,
+          `DTSTART;TZID=Asia/Seoul:${icsDateTime(sc.date, sc.startTime)}`,
+          `DTEND;TZID=Asia/Seoul:${icsDateTime(sc.date, sc.endTime || sc.startTime)}`,
+          `SUMMARY:${icsText(`[${categoryOf(sc.category).label}] ${sc.program}`)}`,
+          `LOCATION:${icsText(sc.location)}`,
+          `DESCRIPTION:${icsText(`대상: ${sc.target}${sc.teacherName ? `\n담당: ${sc.teacherName}` : ''}`)}`,
+          ...(icsAlarm ? ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(sc.program)}`, 'TRIGGER:-PT30M', 'END:VALARM'] : []),
+        ]);
+      });
+    }
+    if (icsTrips) {
+      trips.filter(t => t.startDate <= to && (t.endDate || t.startDate) >= from && mine(t.assigneeId)).forEach(t => {
+        count++;
+        push([
+          `UID:trip-${t.id}@edu-scheduler`,
+          `DTSTART;VALUE=DATE:${icsDate(t.startDate)}`,
+          `DTEND;VALUE=DATE:${icsNextDay(t.endDate || t.startDate)}`,
+          `SUMMARY:${icsText(`✈️ 출장: ${t.title}${icsWho === 'all' && t.assigneeName ? ` (${t.assigneeName})` : ''}`)}`,
+          ...(t.place ? [`LOCATION:${icsText(t.place)}`] : []),
+          'TRANSP:TRANSPARENT',
+          ...(icsAlarm ? ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText('내일 출장: ' + t.title)}`, 'TRIGGER:-PT6H', 'END:VALARM'] : []),
+        ]);
+      });
+    }
+    if (icsTodos) {
+      todos.filter(t => t.status !== 'done' && t.dueDate && t.dueDate >= from && t.dueDate <= to && mine(t.assigneeId)).forEach(t => {
+        count++;
+        const isOfficial = t.category === 'official';
+        push([
+          `UID:todo-${t.id}@edu-scheduler`,
+          `DTSTART;VALUE=DATE:${icsDate(t.dueDate!)}`,
+          `DTEND;VALUE=DATE:${icsNextDay(t.dueDate!)}`,
+          `SUMMARY:${icsText(`${isOfficial ? '📄 공문 기한' : '☑ 마감'}: ${t.title}${icsWho === 'all' && t.assigneeName ? ` (${t.assigneeName})` : ''}`)}`,
+          `DESCRIPTION:${icsText([t.docNo ? `공문 번호: ${t.docNo}` : '', t.docTo ? `제출처: ${t.docTo}` : '', t.note || ''].filter(Boolean).join('\n'))}`,
+          'TRANSP:TRANSPARENT',
+          // 전날 오전 9시 알림 (공문은 3일 전에도 한 번 더)
+          ...(icsAlarm ? ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText('내일 마감: ' + t.title)}`, 'TRIGGER:-PT15H', 'END:VALARM'] : []),
+          ...(icsAlarm && isOfficial ? ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText('공문 기한 3일 전: ' + t.title)}`, 'TRIGGER:-P2DT15H', 'END:VALARM'] : []),
+        ]);
+      });
+    }
+    if (count === 0) { alert('선택한 기간에 내보낼 일정이 없습니다.'); return; }
+    const cal = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//EduScheduler Premium//KO', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+      'X-WR-CALNAME:업무수첩', 'X-WR-TIMEZONE:Asia/Seoul',
+      'BEGIN:VTIMEZONE', 'TZID:Asia/Seoul', 'BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:+0900', 'TZOFFSETTO:+0900', 'TZNAME:KST', 'END:STANDARD', 'END:VTIMEZONE',
+      ...ev,
+      'END:VCALENDAR',
+    ].map(icsFold).join('\r\n');
+    downloadFile(`업무수첩-캘린더-${format(new Date(), 'yyyyMMdd')}.ics`, cal, 'text/calendar;charset=utf-8');
+    logActivity({ targetType: 'todo', targetId: 'ics-export', title: '휴대폰 캘린더 내보내기', action: `${count}건 내보냄 (${icsWho === 'me' ? myTeacherName || '나' : '전체'}, ${icsMonths}개월)`, by: authorName });
+  };
+
   // ---------- 인쇄 ----------
   const PRINT_STYLE = `
       body{font-family:-apple-system,'Malgun Gothic','Apple SD Gothic Neo',sans-serif;padding:32px;color:#1a1a1a;}
@@ -3650,8 +3897,11 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                   <div className="h-full bg-accent-color rounded-full transition-all" style={{ width: `${monthProgress.pct}%` }} />
                 </div>
               </div>
-              <div className="grid grid-cols-3 lg:flex gap-2 shrink-0">
-                <button onClick={() => setIsTripFormOpen(v => !v)} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap", isTripFormOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
+              <div className="grid grid-cols-2 lg:flex gap-2 shrink-0">
+                <button onClick={() => { setIsIcsOpen(v => !v); setIsTripFormOpen(false); }} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap", isIcsOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
+                  <CalendarIcon size={14} /> 폰 캘린더로
+                </button>
+                <button onClick={() => { setIsTripFormOpen(v => !v); setIsIcsOpen(false); }} className={cn("h-9 px-3 lg:px-4 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap", isTripFormOpen ? "bg-accent-color text-on-accent border-accent-color" : "bg-bg-primary border-border-color hover:bg-gray-50")}>
                   <Plane size={14} /> 출장 등록
                 </button>
                 <button onClick={printWeeklyExport} className="h-9 px-3 lg:px-4 bg-bg-primary border border-border-color rounded-full text-xs font-bold hover:bg-gray-50 transition-colors flex items-center gap-1.5 justify-center whitespace-nowrap">
@@ -3662,6 +3912,37 @@ function TasksView({ teachers, authorName, koreanHolidays, weatherDaily, schedul
                 </button>
               </div>
             </div>
+
+            {isIcsOpen && (
+              <div className="mb-5 p-4 bg-bg-primary border border-border-color rounded-xl space-y-3">
+                <h4 className="text-xs font-bold text-text-main flex items-center gap-1.5"><CalendarIcon size={13} /> 휴대폰 캘린더로 내보내기 <span className="font-normal text-text-muted">· 아이폰·구글 캘린더에 추가할 수 있는 파일(.ics)</span></h4>
+                <div className="flex flex-wrap gap-2">
+                  <div className="flex p-1 bg-surface border border-border-color rounded-full">
+                    <button onClick={() => setIcsWho('me')} className={cn("px-3 py-1 rounded-full text-[11px] font-bold", icsWho === 'me' ? "bg-accent-color text-on-accent" : "text-text-muted")}>내 것만{myTeacherName ? ` (${myTeacherName})` : ''}</button>
+                    <button onClick={() => setIcsWho('all')} className={cn("px-3 py-1 rounded-full text-[11px] font-bold", icsWho === 'all' ? "bg-accent-color text-on-accent" : "text-text-muted")}>전체</button>
+                  </div>
+                  <select value={icsMonths} onChange={(e) => setIcsMonths(Number(e.target.value))} className="h-8 px-2 bg-surface border border-border-color rounded-full text-[11px] font-bold outline-none">
+                    <option value={1}>앞으로 1개월</option>
+                    <option value={3}>앞으로 3개월</option>
+                    <option value={6}>앞으로 6개월</option>
+                    <option value={12}>앞으로 1년</option>
+                  </select>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-text-main">
+                  {([['수업·일정', icsClasses, setIcsClasses], ['출장', icsTrips, setIcsTrips], ['할 일·공문 마감', icsTodos, setIcsTodos], ['알림 넣기', icsAlarm, setIcsAlarm]] as [string, boolean, (v: boolean) => void][]).map(([label, val, set]) => (
+                    <label key={label} className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input type="checkbox" checked={val} onChange={(e) => set(e.target.checked)} className="w-4 h-4 accent-[#344B68]" />{label}
+                    </label>
+                  ))}
+                </div>
+                {icsAlarm && <p className="text-[10px] text-text-muted">알림: 수업 30분 전 · 출장 전날 저녁 6시 · 마감 전날 오전 9시 (공문은 3일 전에도 한 번 더)</p>}
+                <button onClick={exportIcs} className="w-full sm:w-auto h-10 px-5 bg-accent-color text-on-accent rounded-lg text-sm font-bold flex items-center gap-1.5 justify-center"><Download size={15} /> 캘린더 파일 받기</button>
+                <div className="text-[10px] text-text-muted leading-relaxed space-y-0.5">
+                  <p>📱 <b>아이폰:</b> 사파리에서 버튼을 누르면 캘린더 미리보기가 열려요 → <b>"모두 추가"</b> → 추가할 캘린더를 고르세요.</p>
+                  <p>💡 다시 내보낼 땐 중복되지 않도록, 아이폰 캘린더 앱에 <b>"업무수첩" 캘린더를 따로 만들어</b> 그곳에 추가하고, 새로 받기 전에 그 캘린더를 지웠다가 다시 만드는 게 깔끔해요.</p>
+                </div>
+              </div>
+            )}
 
             {isTripFormOpen && (
               <div className="mb-5 p-4 bg-bg-primary border border-border-color rounded-xl space-y-2">
