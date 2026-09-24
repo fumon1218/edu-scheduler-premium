@@ -7,6 +7,7 @@ import { cn } from '../lib/utils';
 import { GRAMMAR } from './grammar';
 import { OSAKA_UPDATED, CHECKLIST, ROUTES, ARRIVAL_STEPS, RAPIT_STEPS, USJ, HISTORY, PHRASES, FOODS, TIPS, EMERGENCY } from './osaka';
 import { newId, type CultureRecord } from './cultureData';
+import { Plus, Pencil } from 'lucide-react';
 
 // ---------------------------------------------------------------------
 // 소리 내어 읽기 (브라우저 음성 합성)
@@ -122,8 +123,10 @@ const Steps = ({ items }: { items: { t: string; d: string }[] }) => (
   </ol>
 );
 
-export function OsakaTab({ saveRecord, hasTrip }: { saveRecord: (r: CultureRecord) => Promise<any>; hasTrip: boolean }) {
+export function OsakaTab({ saveRecord, hasTrip, notes, onAddNote, onEditNote }: { saveRecord: (r: CultureRecord) => Promise<any>; hasTrip: boolean; notes: CultureRecord[]; onAddNote: (section: string) => void; onEditNote: (r: CultureRecord) => void }) {
   const [sec, setSec] = useState<Sec>('prep');
+  const secLabel = SECS.find(s => s.id === sec)!.label;
+  const myNotes = notes.filter(n => n.section === secLabel).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const [done, setDone] = useState<Record<number, boolean>>(() => { try { return JSON.parse(localStorage.getItem('eduOsakaChecklist') || '{}'); } catch { return {}; } });
   const toggle = (i: number) => { const n = { ...done, [i]: !done[i] }; setDone(n); try { localStorage.setItem('eduOsakaChecklist', JSON.stringify(n)); } catch { /* */ } };
   const addTrip = async () => {
@@ -143,6 +146,28 @@ export function OsakaTab({ saveRecord, hasTrip }: { saveRecord: (r: CultureRecor
         {SECS.map(s => (
           <button key={s.id} onClick={() => setSec(s.id)} className={cn('px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 whitespace-nowrap', sec === s.id ? 'bg-accent-color text-on-accent shadow-sm' : 'text-text-muted hover:text-text-main')}>{s.icon}{s.label}</button>
         ))}
+      </div>
+
+      <div className="bg-surface border border-border-color rounded-2xl p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-bold flex items-center gap-1.5"><Pencil size={14} /> 내가 추가한 정보 · {secLabel} {myNotes.length > 0 && <span className="text-text-muted font-normal">{myNotes.length}</span>}</div>
+          <button onClick={() => onAddNote(secLabel)} className="h-8 px-3 rounded-full bg-accent-color text-on-accent text-xs font-bold flex items-center gap-1"><Plus size={13} /> 정보 추가</button>
+        </div>
+        {myNotes.length === 0 ? <p className="text-xs text-text-muted mt-2">바뀐 요금, 새로 찾은 맛집, 유용한 링크를 이 항목에 직접 추가해 두세요. 계정에 저장되어 어디서나 보입니다.</p> : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+            {myNotes.map(n => (
+              <div key={n.id} className="p-3 rounded-xl bg-soft">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-bold text-sm break-words">{n.title}</div>
+                  <button onClick={() => onEditNote({ ...n })} className="w-7 h-7 rounded-full hover:bg-surface flex items-center justify-center text-text-muted shrink-0"><Pencil size={13} /></button>
+                </div>
+                {n.body && <p className="text-xs text-text-main/85 mt-1 whitespace-pre-line leading-relaxed">{n.body}</p>}
+                {n.url && <a href={n.url} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-accent-color mt-1.5 inline-flex items-center gap-1 break-all"><ExternalLink size={11} /> 링크 열기</a>}
+                <div className="text-[10px] text-text-muted/70 mt-1">{n.updatedAt ? new Date(n.updatedAt).toLocaleDateString('ko-KR') : ''}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {sec === 'prep' && (

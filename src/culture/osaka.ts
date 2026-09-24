@@ -4,6 +4,7 @@
 // =====================================================================
 
 export const OSAKA_UPDATED = '2026년 9월 기준';
+export const GUIDE_SECTIONS = ['준비물', '공항 → 시내', 'USJ', '오사카 역사', '필수 회화', '맛집', '생활 팁 · 긴급'];
 
 export const CHECKLIST: string[] = [
   '여권 (유효기간 확인)',

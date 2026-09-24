@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Sparkles, Palette, GraduationCap, BookOpen, Feather, Plane, Ticket, Music, Languages, BarChart3,
   ChevronLeft, ChevronRight, Check, Plus, X, Trash2, Search, Shuffle, RotateCcw, ExternalLink, Star,
-  Scale, CalendarDays, Download, Heart, Pencil, Eye, EyeOff, CloudOff, Cloud,
+  Scale, CalendarDays, Download, Heart, Pencil, Eye, EyeOff, CloudOff, Cloud, FolderOpen, Link2,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
@@ -15,8 +15,10 @@ import {
 import { MONTH_POEMS, MONTH_ARTS, MONTH_MUSIC } from './monthly';
 import { GRAMMAR_ITEMS } from './grammar';
 import { GrammarTab, OsakaTab, SpeakBtn } from './CultureExtra';
+import { MyDataTab, useMyDecks, useAutoSync, type MyDeck } from './MyData';
+import { GUIDE_SECTIONS } from './osaka';
 
-type Tab = 'today' | 'grammar' | 'month' | 'study' | 'osaka' | RecordKind | 'year';
+type Tab = 'today' | 'grammar' | 'month' | 'study' | 'osaka' | 'mydata' | RecordKind | 'year';
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 const pad = (n: number) => String(n).padStart(2, '0');
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -37,7 +39,11 @@ const DECKS: DeckDef[] = [
   { id: 'esw', label: '스페인어 단어', short: '스페인어 단어', lang: '스페인어', voice: 'es-ES', items: d => d.esw, front: x => x.w, sub: x => x.c, back: x => x.k },
   { id: 'law', label: '특수교육법', short: '특수교육법', items: d => d.law, front: x => `${x.no} (${x.t})`, sub: x => x.ch, back: x => x.x },
 ];
-const deckOf = (id: DeckId) => DECKS.find(d => d.id === id)!;
+const VOICE_LANG: Record<string, string> = { 'en-US': '영어', 'ja-JP': '일본어', 'es-ES': '스페인어' };
+function customDef(d: MyDeck): DeckDef {
+  return { id: d.id, label: d.name, short: d.name, voice: (d.voice || undefined) as any, lang: VOICE_LANG[d.voice] || '기타', items: () => d.items,
+    front: x => x.f, sub: x => x.s || '', back: x => x.b, detail: x => x.d || '' };
+}
 
 // ---------------------------------------------------------------------
 // 기록 양식 정의
@@ -101,14 +107,31 @@ const FORMS: Record<RecordKind, { title: string; icon: React.ReactNode; fields: 
     { key: 'meaning', label: '뜻', type: 'text', required: true },
     { key: 'example', label: '예문 · 메모', type: 'textarea', rows: 3 },
   ] },
+  link: { title: '링크', icon: <Link2 size={15} />, empty: '자주 보는 사이트, 블로그, 유튜브 영상 링크를 모아 두세요.', fields: [
+    { key: 'title', label: '제목', type: 'text', required: true },
+    { key: 'url', label: '주소 (https://…)', type: 'text', required: true },
+    { key: 'tag', label: '분류', type: 'select', options: ['영어', '일본어', '스페인어', '한자·사자성어', '여행', '문학·예술', '업무', '기타'] },
+    { key: 'memo', label: '메모', type: 'textarea', rows: 3 },
+  ] },
+  gnote: { title: '가이드 정보', icon: <Plane size={15} />, empty: '', fields: [
+    { key: 'section', label: '항목', type: 'select', options: GUIDE_SECTIONS },
+    { key: 'title', label: '제목', type: 'text', required: true, placeholder: '예) 라피트 요금 변경, 새로 찾은 라멘집' },
+    { key: 'body', label: '내용', type: 'textarea', rows: 5 },
+    { key: 'url', label: '관련 링크 (선택)', type: 'text' },
+  ] },
 };
-const KIND_COLOR: Record<RecordKind, string> = { book: '#4A6FA5', copy: '#7A5C99', trip: '#3E7C74', show: '#B26B3A', music: '#B24638', vocab: '#6B7B3A' };
+const MAIN_KINDS: RecordKind[] = ['book', 'copy', 'trip', 'show', 'music', 'vocab'];
+const KIND_COLOR: Record<RecordKind, string> = { book: '#4A6FA5', copy: '#7A5C99', trip: '#3E7C74', show: '#B26B3A', music: '#B24638', vocab: '#6B7B3A', link: '#5C6773', gnote: '#3E7C74' };
 
 // =====================================================================
 export default function CultureView({ uid }: { uid?: string | null }) {
   const [tab, setTab] = useState<Tab>('today');
   const { data, error } = useStudyData();
   const store = useCultureStore(uid);
+  const myDecks = useMyDecks(uid, store.mode);
+  useAutoSync(myDecks.decks, myDecks.saveDeck, store.mode !== 'loading');
+  const extra = useMemo(() => myDecks.decks.map(customDef), [myDecks.decks]);
+  const [noteEdit, setNoteEdit] = useState<CultureRecord | null>(null);
   const [studyDeck, setStudyDeck] = useState<DeckId>('saja');
   const openDeck = (id: DeckId) => { setStudyDeck(id); setTab('study'); };
 
@@ -140,18 +163,21 @@ export default function CultureView({ uid }: { uid?: string | null }) {
           {tabBtn('show', <Ticket size={14} />, '관람')}
           {tabBtn('music', <Music size={14} />, '음악')}
           {tabBtn('vocab', <Languages size={14} />, '단어장')}
+          {tabBtn('mydata', <FolderOpen size={14} />, '내 자료')}
           {tabBtn('year', <BarChart3 size={14} />, '연간 기록')}
         </div>
       </div>
 
       {error && <div className="p-4 rounded-2xl bg-surface border border-red-200 text-sm text-red-600 mb-4">{error}</div>}
-      {tab === 'today' && <TodayTab data={data} store={store} openDeck={openDeck} goMonth={() => setTab('month')} goGrammar={() => setTab('grammar')} />}
+      {tab === 'today' && <TodayTab data={data} store={store} extra={extra} openDeck={openDeck} goMonth={() => setTab('month')} goGrammar={() => setTab('grammar')} />}
       {tab === 'month' && <MonthTab />}
       {tab === 'grammar' && <GrammarTab openStudy={() => openDeck('grammar')} />}
-      {tab === 'osaka' && <OsakaTab saveRecord={store.saveRecord} hasTrip={store.items.some(r => r.kind === 'trip' && /오사카/.test(r.title || ''))} />}
-      {tab === 'study' && <StudyTab data={data} store={store} deck={studyDeck} setDeck={setStudyDeck} />}
-      {(['book', 'copy', 'trip', 'show', 'music', 'vocab'] as RecordKind[]).includes(tab as RecordKind) && <RecordTab kind={tab as RecordKind} store={store} />}
-      {tab === 'year' && <YearTab data={data} store={store} />}
+      {tab === 'osaka' && <OsakaTab saveRecord={store.saveRecord} hasTrip={store.items.some(r => r.kind === 'trip' && /오사카/.test(r.title || ''))} notes={store.items.filter(r => r.kind === 'gnote' && (r.guide || 'osaka') === 'osaka')} onAddNote={s => setNoteEdit({ id: '', kind: 'gnote', guide: 'osaka', section: s })} onEditNote={setNoteEdit} />}
+      {tab === 'mydata' && <MyDataTab decks={myDecks.decks} saveDeck={myDecks.saveDeck} removeDeck={myDecks.removeDeck} openDeck={openDeck} linksNode={<RecordTab kind="link" store={store} />} />}
+      {noteEdit && <RecordEditor rec={noteEdit} store={store} onClose={() => setNoteEdit(null)} />}
+      {tab === 'study' && <StudyTab data={data} store={store} extra={extra} deck={studyDeck} setDeck={setStudyDeck} />}
+      {MAIN_KINDS.includes(tab as RecordKind) && <RecordTab kind={tab as RecordKind} store={store} />}
+      {tab === 'year' && <YearTab data={data} store={store} extra={extra} />}
     </div>
   );
 }
@@ -230,7 +256,7 @@ const Loading = () => <div className="p-10 text-center text-sm text-text-muted">
 // =====================================================================
 // 오늘
 // =====================================================================
-function TodayTab({ data, store, openDeck, goMonth, goGrammar }: { data: StudyData | null; store: Store; openDeck: (id: DeckId) => void; goMonth: () => void; goGrammar: () => void }) {
+function TodayTab({ data, store, extra, openDeck, goMonth, goGrammar }: { data: StudyData | null; store: Store; extra: DeckDef[]; openDeck: (id: DeckId) => void; goMonth: () => void; goGrammar: () => void }) {
   const [day, setDay] = useState(() => new Date());
   if (!data) return <Loading />;
   const isToday = iso(day) === iso(new Date());
@@ -358,19 +384,31 @@ function TodayTab({ data, store, openDeck, goMonth, goGrammar }: { data: StudyDa
             </button>
           </div>
         </Card>
+
+        {/* 내 자료 */}
+        {extra.filter(d => d.items(data).length > 0).length > 0 && (
+          <Card className="lg:col-span-3" title="오늘의 내 자료" icon={<FolderOpen size={13} />}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {extra.filter(d => d.items(data).length > 0).slice(0, 6).map((d, i) => {
+                const x: any = pickDaily(d.items(data), day, i * 11)!;
+                return <LangBox key={d.id} voice={(d.voice || 'en-US') as any} noVoice={!d.voice} flag={d.lang || '내 자료'} label={d.label} main={d.front(x)} sub={d.sub?.(x)} mean={d.back(x)} extra={d.detail?.(x)} known={k(d.id, x.id)} onKnown={() => tog(d.id, x.id)} onAdd={() => addVocab(d.lang || '기타', d.front(x), d.back(x), d.detail?.(x) || '')} />;
+              })}
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );
 }
 
-function LangBox({ voice, flag, label, main, sub, mean, extra, known, onKnown, onAdd }: { voice: 'en-US' | 'ja-JP' | 'es-ES'; flag: string; label: string; main: string; sub?: string; mean: string; extra?: string; known: boolean; onKnown: () => void; onAdd: () => void }) {
+function LangBox({ voice, noVoice, flag, label, main, sub, mean, extra, known, onKnown, onAdd }: { voice: 'en-US' | 'ja-JP' | 'es-ES'; noVoice?: boolean; flag: string; label: string; main: string; sub?: string; mean: string; extra?: string; known: boolean; onKnown: () => void; onAdd: () => void }) {
   const [show, setShow] = useState(false);
   return (
     <div className="p-4 rounded-xl bg-soft border border-line-soft flex flex-col">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-accent-color text-on-accent">{flag}</span>
         <span className="text-[11px] font-bold text-text-muted flex-1">{label}</span>
-        <SpeakBtn text={main} lang={voice} small />
+        {!noVoice && <SpeakBtn text={main} lang={voice} small />}
       </div>
       <div className="text-lg font-bold text-text-main leading-snug break-words">{main}</div>
       {sub && <div className="text-xs text-text-muted mt-1 break-words">{sub}</div>}
@@ -430,7 +468,7 @@ function MonthTab() {
 // =====================================================================
 // 학습 (목록 · 카드 · 퀴즈)
 // =====================================================================
-function StudyTab({ data, store, deck, setDeck }: { data: StudyData | null; store: Store; deck: DeckId; setDeck: (d: DeckId) => void }) {
+function StudyTab({ data, store, extra, deck, setDeck }: { data: StudyData | null; store: Store; extra: DeckDef[]; deck: DeckId; setDeck: (d: DeckId) => void }) {
   const [mode, setMode] = useState<'list' | 'card' | 'quiz'>('list');
   const [filter, setFilter] = useState<'all' | 'todo' | 'known'>('all');
   const [q, setQ] = useState('');
@@ -438,7 +476,9 @@ function StudyTab({ data, store, deck, setDeck }: { data: StudyData | null; stor
   const [limit, setLimit] = useState(60);
   useEffect(() => { setLimit(60); setStage(0); }, [deck]);
   if (!data) return <Loading />;
-  const def = deckOf(deck);
+  const allDefs = [...DECKS, ...extra];
+  const def = allDefs.find(d => d.id === deck) || DECKS[0];
+  deck = def.id;
   const all = def.items(data);
   const known = store.knownSet[deck] || new Set<string>();
   const list = all.filter((x: any) => {
@@ -457,11 +497,12 @@ function StudyTab({ data, store, deck, setDeck }: { data: StudyData | null; stor
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {DECKS.map(d => {
+        {allDefs.map(d => {
           const total = d.items(data).length, kn = store.knownSet[d.id]?.size || 0;
+          const mine = !DECKS.includes(d);
           return (
-            <button key={d.id} onClick={() => setDeck(d.id)} className={cn('px-3 py-2 rounded-xl border text-left transition-colors', deck === d.id ? 'bg-accent-color text-on-accent border-accent-color' : 'bg-surface border-border-color text-text-main hover:border-accent-color')}>
-              <div className="text-xs font-bold">{d.label}</div>
+            <button key={d.id} onClick={() => setDeck(d.id)} title={mine ? '내 자료 덱' : undefined} className={cn('px-3 py-2 rounded-xl border text-left transition-colors', deck === d.id ? 'bg-accent-color text-on-accent border-accent-color' : 'bg-surface border-border-color text-text-main hover:border-accent-color')}>
+              <div className="text-xs font-bold flex items-center gap-1">{mine && <FolderOpen size={11} />}{d.label}</div>
               <div className={cn('text-[10px] mt-0.5', deck === d.id ? 'text-on-accent/80' : 'text-text-muted')}>{kn} / {total} 외움</div>
             </button>
           );
@@ -656,7 +697,7 @@ function RecordTab({ kind, store }: { kind: RecordKind; store: Store }) {
         </div>
       ) : kind === 'vocab' ? <VocabList list={list} store={store} onEdit={setEditing} /> : (
         <div className={cn('grid gap-3', kind === 'copy' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3')}>
-          {list.map(r => <RecordCard key={r.id} r={r} onClick={() => setEditing({ ...r })} />)}
+          {list.map(r => r.kind === 'link' ? <LinkCard key={r.id} r={r} onEdit={() => setEditing({ ...r })} /> : <RecordCard key={r.id} r={r} onClick={() => setEditing({ ...r })} />)}
         </div>
       )}
 
@@ -690,6 +731,27 @@ function RecordCard({ r, onClick }: { r: CultureRecord; onClick: () => void }) {
       {packing.length > 0 && <div className="text-[11px] text-text-muted mt-2">준비물 {packing.filter(p => p.d).length}/{packing.length}</div>}
       {r.rating ? <div className="mt-2"><Stars value={r.rating} size={13} /></div> : null}
     </button>
+  );
+}
+
+function LinkCard({ r, onEdit }: { r: CultureRecord; onEdit: () => void }) {
+  let host = ''; try { host = new URL(/^https?:\/\//.test(r.url) ? r.url : 'https://' + r.url).hostname.replace(/^www\./, ''); } catch { /* */ }
+  const yt = /youtube\.com|youtu\.be/.test(host);
+  return (
+    <div className="bg-surface border border-border-color rounded-2xl p-4 flex flex-col">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-bold text-text-main break-words">{r.title}</div>
+          <div className="text-[11px] text-text-muted mt-0.5 break-all">{host}</div>
+        </div>
+        {r.tag && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-soft border border-line-soft text-text-muted shrink-0">{r.tag}</span>}
+      </div>
+      {r.memo && <p className="text-sm text-text-main/85 mt-2 line-clamp-3 whitespace-pre-line">{r.memo}</p>}
+      <div className="flex gap-1.5 mt-auto pt-3">
+        <a href={/^https?:\/\//.test(r.url) ? r.url : 'https://' + r.url} target="_blank" rel="noreferrer" className="h-8 px-3 rounded-full bg-accent-color text-on-accent text-xs font-bold flex items-center gap-1"><ExternalLink size={12} /> {yt ? '영상 보기' : '열기'}</a>
+        <button onClick={onEdit} className="h-8 px-3 rounded-full border border-border-color text-xs font-bold text-text-muted flex items-center gap-1"><Pencil size={12} /> 수정</button>
+      </div>
+    </div>
   );
 }
 
@@ -800,14 +862,14 @@ function ChecklistEditor({ value, onChange }: { value: { t: string; d: boolean }
 // =====================================================================
 // 연간 기록
 // =====================================================================
-function YearTab({ data, store }: { data: StudyData | null; store: Store }) {
+function YearTab({ data, store, extra }: { data: StudyData | null; store: Store; extra: DeckDef[] }) {
   const years = useMemo(() => {
     const s = new Set<number>([new Date().getFullYear()]);
-    store.items.forEach(r => { const d = recordDate(r); if (d) s.add(Number(d.slice(0, 4))); });
+    store.items.forEach(r => { if (!MAIN_KINDS.includes(r.kind)) return; const d = recordDate(r); if (d) s.add(Number(d.slice(0, 4))); });
     return Array.from(s).sort((a, b) => b - a);
   }, [store.items]);
   const [year, setYear] = useState(new Date().getFullYear());
-  const inYear = store.items.filter(r => recordDate(r).startsWith(String(year)));
+  const inYear = store.items.filter(r => MAIN_KINDS.includes(r.kind) && recordDate(r).startsWith(String(year)));
   const count = (k: RecordKind, pred?: (r: CultureRecord) => boolean) => inYear.filter(r => r.kind === k && (!pred || pred(r))).length;
   const months = Array.from({ length: 12 }, (_, i) => {
     const mm = `${year}-${pad(i + 1)}`;
@@ -862,14 +924,14 @@ function YearTab({ data, store }: { data: StudyData | null; store: Store }) {
             })}
           </div>
           <div className="flex flex-wrap gap-3 mt-3">
-            {(Object.keys(KIND_COLOR) as RecordKind[]).map(k => <span key={k} className="text-[10px] text-text-muted flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: KIND_COLOR[k] }} />{FORMS[k].title}</span>)}
+            {MAIN_KINDS.map(k => <span key={k} className="text-[10px] text-text-muted flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: KIND_COLOR[k] }} />{FORMS[k].title}</span>)}
           </div>
           {spent > 0 && <div className="text-xs text-text-muted mt-3">여행 지출 합계 {spent.toLocaleString()}원</div>}
         </Card>
         <Card title="학습 진도 (누적)" icon={<GraduationCap size={13} />}>
           {!data ? <div className="text-sm text-text-muted">불러오는 중…</div> : (
             <div className="space-y-2.5">
-              {DECKS.map(d => {
+              {[...DECKS, ...extra].map(d => {
                 const total = d.items(data).length, kn = store.knownSet[d.id]?.size || 0;
                 return (
                   <div key={d.id}>

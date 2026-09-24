@@ -56,9 +56,9 @@ export function pickDaily<T>(arr: T[], d: Date, salt = 0): T | undefined {
 // ---------------------------------------------------------------------
 // 기록(독서·필사·여행·관람·음악·단어장) + 학습 진도(외운 항목)
 // ---------------------------------------------------------------------
-export type RecordKind = 'book' | 'copy' | 'trip' | 'show' | 'music' | 'vocab';
+export type RecordKind = 'book' | 'copy' | 'trip' | 'show' | 'music' | 'vocab' | 'link' | 'gnote';
 export interface CultureRecord { id: string; kind: RecordKind; createdAt?: number; updatedAt?: number; [key: string]: any }
-export type DeckId = 'saja' | 'cheonja' | 'hanja' | 'en' | 'grammar' | 'es' | 'esw' | 'ja' | 'law';
+export type DeckId = string; // 기본 덱: saja, cheonja, hanja, en, grammar, es, esw, ja, law / 내 자료 덱: u…
 export type Progress = Partial<Record<DeckId, string[]>>;
 
 const LOCAL_KEY = 'eduCultureV1';
