@@ -13,8 +13,10 @@ import {
   type StudyData, type DeckId, type CultureRecord, type RecordKind,
 } from './cultureData';
 import { MONTH_POEMS, MONTH_ARTS, MONTH_MUSIC } from './monthly';
+import { GRAMMAR_ITEMS } from './grammar';
+import { GrammarTab, OsakaTab, SpeakBtn } from './CultureExtra';
 
-type Tab = 'today' | 'month' | 'study' | RecordKind | 'year';
+type Tab = 'today' | 'grammar' | 'month' | 'study' | 'osaka' | RecordKind | 'year';
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 const pad = (n: number) => String(n).padStart(2, '0');
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -23,15 +25,16 @@ const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.get
 // ---------------------------------------------------------------------
 // 학습 자료(덱) 정의
 // ---------------------------------------------------------------------
-interface DeckDef { id: DeckId; label: string; short: string; lang?: string; items: (d: StudyData) => any[]; front: (x: any) => string; sub?: (x: any) => string; back: (x: any) => string; detail?: (x: any) => string; serif?: boolean }
+interface DeckDef { id: DeckId; label: string; short: string; lang?: string; voice?: 'en-US' | 'ja-JP' | 'es-ES'; items: (d: StudyData) => any[]; front: (x: any) => string; sub?: (x: any) => string; back: (x: any) => string; detail?: (x: any) => string; serif?: boolean }
 const DECKS: DeckDef[] = [
   { id: 'saja', label: '사자성어', short: '사자성어', items: d => d.saja, front: x => x.h, sub: x => x.r, back: x => x.m, detail: x => [x.hun.join(' · '), x.n].filter(Boolean).join('\n'), serif: true },
   { id: 'cheonja', label: '천자문', short: '천자문', items: d => d.cheonja, front: x => x.h, sub: x => x.r, back: x => x.m, serif: true },
   { id: 'hanja', label: '한자 1800', short: '한자', items: d => d.hanja, front: x => x.c, sub: x => x.e, back: x => `${x.hun} ${x.e}`, detail: x => x.jp ? `일본어 훈독: ${x.jp}` : '', serif: true },
-  { id: 'en', label: '영어 VOA 1500', short: '영어', lang: '영어', items: d => d.en, front: x => x.w, back: x => x.k || x.d, detail: x => x.d },
-  { id: 'ja', label: '일본어 기초 문장', short: '일본어', lang: '일본어', items: d => d.ja, front: x => x.t, sub: x => [x.kana, x.p].filter(Boolean).join(' · '), back: x => x.k, detail: x => x.n },
-  { id: 'es', label: '스페인어 문장', short: '스페인어 문장', lang: '스페인어', items: d => d.es, front: x => x.t, sub: x => x.p, back: x => x.k, detail: x => x.n },
-  { id: 'esw', label: '스페인어 단어', short: '스페인어 단어', lang: '스페인어', items: d => d.esw, front: x => x.w, sub: x => x.c, back: x => x.k },
+  { id: 'en', label: '영어 VOA 1500', short: '영어', lang: '영어', voice: 'en-US', items: d => d.en, front: x => x.w, back: x => x.k || x.d, detail: x => x.d },
+  { id: 'grammar', label: '영문법 예문', short: '영문법', lang: '영어', voice: 'en-US', items: () => GRAMMAR_ITEMS, front: x => x.en, sub: x => x.lesson, back: x => x.ko, detail: x => x.note },
+  { id: 'ja', label: '일본어 기초 문장', short: '일본어', lang: '일본어', voice: 'ja-JP', items: d => d.ja, front: x => x.t, sub: x => [x.kana, x.p].filter(Boolean).join(' · '), back: x => x.k, detail: x => x.n },
+  { id: 'es', label: '스페인어 문장', short: '스페인어 문장', lang: '스페인어', voice: 'es-ES', items: d => d.es, front: x => x.t, sub: x => x.p, back: x => x.k, detail: x => x.n },
+  { id: 'esw', label: '스페인어 단어', short: '스페인어 단어', lang: '스페인어', voice: 'es-ES', items: d => d.esw, front: x => x.w, sub: x => x.c, back: x => x.k },
   { id: 'law', label: '특수교육법', short: '특수교육법', items: d => d.law, front: x => `${x.no} (${x.t})`, sub: x => x.ch, back: x => x.x },
 ];
 const deckOf = (id: DeckId) => DECKS.find(d => d.id === id)!;
@@ -127,11 +130,13 @@ export default function CultureView({ uid }: { uid?: string | null }) {
         </div>
         <div className="flex p-1 bg-surface border border-border-color rounded-full w-fit max-w-full shadow-sm overflow-x-auto no-scrollbar">
           {tabBtn('today', <Sparkles size={14} />, '오늘')}
+          {tabBtn('grammar', <Languages size={14} />, '영문법')}
           {tabBtn('month', <Palette size={14} />, '이달의 작품')}
           {tabBtn('study', <GraduationCap size={14} />, '학습')}
           {tabBtn('book', <BookOpen size={14} />, '독서')}
           {tabBtn('copy', <Feather size={14} />, '필사')}
           {tabBtn('trip', <Plane size={14} />, '여행')}
+          {tabBtn('osaka', <Plane size={14} />, '오사카 가이드')}
           {tabBtn('show', <Ticket size={14} />, '관람')}
           {tabBtn('music', <Music size={14} />, '음악')}
           {tabBtn('vocab', <Languages size={14} />, '단어장')}
@@ -140,8 +145,10 @@ export default function CultureView({ uid }: { uid?: string | null }) {
       </div>
 
       {error && <div className="p-4 rounded-2xl bg-surface border border-red-200 text-sm text-red-600 mb-4">{error}</div>}
-      {tab === 'today' && <TodayTab data={data} store={store} openDeck={openDeck} goMonth={() => setTab('month')} />}
+      {tab === 'today' && <TodayTab data={data} store={store} openDeck={openDeck} goMonth={() => setTab('month')} goGrammar={() => setTab('grammar')} />}
       {tab === 'month' && <MonthTab />}
+      {tab === 'grammar' && <GrammarTab openStudy={() => openDeck('grammar')} />}
+      {tab === 'osaka' && <OsakaTab saveRecord={store.saveRecord} hasTrip={store.items.some(r => r.kind === 'trip' && /오사카/.test(r.title || ''))} />}
       {tab === 'study' && <StudyTab data={data} store={store} deck={studyDeck} setDeck={setStudyDeck} />}
       {(['book', 'copy', 'trip', 'show', 'music', 'vocab'] as RecordKind[]).includes(tab as RecordKind) && <RecordTab kind={tab as RecordKind} store={store} />}
       {tab === 'year' && <YearTab data={data} store={store} />}
@@ -223,7 +230,7 @@ const Loading = () => <div className="p-10 text-center text-sm text-text-muted">
 // =====================================================================
 // 오늘
 // =====================================================================
-function TodayTab({ data, store, openDeck, goMonth }: { data: StudyData | null; store: Store; openDeck: (id: DeckId) => void; goMonth: () => void }) {
+function TodayTab({ data, store, openDeck, goMonth, goGrammar }: { data: StudyData | null; store: Store; openDeck: (id: DeckId) => void; goMonth: () => void; goGrammar: () => void }) {
   const [day, setDay] = useState(() => new Date());
   if (!data) return <Loading />;
   const isToday = iso(day) === iso(new Date());
@@ -235,6 +242,7 @@ function TodayTab({ data, store, openDeck, goMonth }: { data: StudyData | null; 
   const es = pickDaily(data.es, day)!;
   const esw = pickDaily(data.esw, day, 3)!;
   const law = pickDaily(data.law, day)!;
+  const gr = pickDaily(GRAMMAR_ITEMS, day)!;
   const m = day.getMonth();
   const k = (deck: DeckId, id: string) => !!store.knownSet[deck]?.has(id);
   const tog = (deck: DeckId, id: string) => store.setKnown(deck, id, !k(deck, id));
@@ -296,15 +304,27 @@ function TodayTab({ data, store, openDeck, goMonth }: { data: StudyData | null; 
         {/* 외국어 */}
         <Card className="lg:col-span-2" title="오늘의 외국어" icon={<Languages size={13} />}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <LangBox flag="EN" label="영어 단어" main={en.w} sub={en.d} mean={en.k} known={k('en', en.id)} onKnown={() => tog('en', en.id)} onAdd={() => addVocab('영어', en.w, en.k || en.d, en.d)} />
-            <LangBox flag="JA" label="일본어 한 문장" main={ja.t} sub={[ja.kana, ja.p].filter(Boolean).join(' · ')} mean={ja.k} extra={ja.n} known={k('ja', ja.id)} onKnown={() => tog('ja', ja.id)} onAdd={() => addVocab('일본어', ja.t, ja.k, [ja.kana, ja.p, ja.n].filter(Boolean).join(' / '))} />
-            <LangBox flag="ES" label="스페인어 한 문장" main={es.t} sub={es.p} mean={es.k} extra={es.n} known={k('es', es.id)} onKnown={() => tog('es', es.id)} onAdd={() => addVocab('스페인어', es.t, es.k, [es.p, es.n].filter(Boolean).join(' / '))} />
+            <LangBox voice="en-US" flag="EN" label="영어 단어" main={en.w} sub={en.d} mean={en.k} known={k('en', en.id)} onKnown={() => tog('en', en.id)} onAdd={() => addVocab('영어', en.w, en.k || en.d, en.d)} />
+            <LangBox voice="ja-JP" flag="JA" label="일본어 한 문장" main={ja.t} sub={[ja.kana, ja.p].filter(Boolean).join(' · ')} mean={ja.k} extra={ja.n} known={k('ja', ja.id)} onKnown={() => tog('ja', ja.id)} onAdd={() => addVocab('일본어', ja.t, ja.k, [ja.kana, ja.p, ja.n].filter(Boolean).join(' / '))} />
+            <LangBox voice="es-ES" flag="ES" label="스페인어 한 문장" main={es.t} sub={es.p} mean={es.k} extra={es.n} known={k('es', es.id)} onKnown={() => tog('es', es.id)} onAdd={() => addVocab('스페인어', es.t, es.k, [es.p, es.n].filter(Boolean).join(' / '))} />
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span className="text-[11px] font-black text-text-muted">스페인어 단어</span>
             <span className="font-bold">{esw.w}</span><span className="text-text-muted">{esw.k}</span>
             <KnownBtn small known={k('esw', esw.id)} onClick={() => tog('esw', esw.id)} />
           </div>
+        </Card>
+
+        {/* 영어 문법 */}
+        <Card title="오늘의 영어 문법" icon={<Languages size={13} />} right={<KnownBtn small known={k('grammar', gr.id)} onClick={() => tog('grammar', gr.id)} />}>
+          <div className="text-[11px] font-black text-accent-color">{gr.lesson}</div>
+          <div className="flex items-start gap-2 mt-1.5">
+            <div className="text-lg font-bold text-text-main leading-snug flex-1">{gr.en}</div>
+            <SpeakBtn text={gr.en} lang="en-US" small />
+          </div>
+          <div className="text-sm text-text-muted mt-1.5">{gr.ko}</div>
+          {gr.note && <div className="mt-3 p-2.5 rounded-xl bg-soft text-xs font-bold text-text-main">{gr.note}</div>}
+          <button onClick={goGrammar} className="mt-3 text-[11px] text-text-muted underline">이 문법 자세히 보기</button>
         </Card>
 
         {/* 특수교육법 */}
@@ -316,7 +336,7 @@ function TodayTab({ data, store, openDeck, goMonth }: { data: StudyData | null; 
         </Card>
 
         {/* 이달의 작품 미리보기 */}
-        <Card className="lg:col-span-3" title={`${m + 1}월의 작품`} icon={<Palette size={13} />} right={<button onClick={goMonth} className="text-[11px] font-bold text-text-muted underline">자세히</button>}>
+        <Card className="lg:col-span-2" title={`${m + 1}월의 작품`} icon={<Palette size={13} />} right={<button onClick={goMonth} className="text-[11px] font-bold text-text-muted underline">자세히</button>}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <button onClick={goMonth} className="text-left p-4 rounded-xl bg-soft border border-line-soft hover:border-accent-color transition-colors">
               <div className="text-[10px] font-black text-text-muted">이달의 시</div>
@@ -343,13 +363,14 @@ function TodayTab({ data, store, openDeck, goMonth }: { data: StudyData | null; 
   );
 }
 
-function LangBox({ flag, label, main, sub, mean, extra, known, onKnown, onAdd }: { flag: string; label: string; main: string; sub?: string; mean: string; extra?: string; known: boolean; onKnown: () => void; onAdd: () => void }) {
+function LangBox({ voice, flag, label, main, sub, mean, extra, known, onKnown, onAdd }: { voice: 'en-US' | 'ja-JP' | 'es-ES'; flag: string; label: string; main: string; sub?: string; mean: string; extra?: string; known: boolean; onKnown: () => void; onAdd: () => void }) {
   const [show, setShow] = useState(false);
   return (
     <div className="p-4 rounded-xl bg-soft border border-line-soft flex flex-col">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-accent-color text-on-accent">{flag}</span>
-        <span className="text-[11px] font-bold text-text-muted">{label}</span>
+        <span className="text-[11px] font-bold text-text-muted flex-1">{label}</span>
+        <SpeakBtn text={main} lang={voice} small />
       </div>
       <div className="text-lg font-bold text-text-main leading-snug break-words">{main}</div>
       {sub && <div className="text-xs text-text-muted mt-1 break-words">{sub}</div>}
@@ -482,7 +503,10 @@ function StudyTab({ data, store, deck, setDeck }: { data: StudyData | null; stor
                       <div className={cn('font-bold text-text-main break-words', def.serif ? 'font-serif text-2xl' : 'text-base')}>{def.front(x)}</div>
                       {def.sub && def.sub(x) && <div className="text-xs text-accent-color font-bold mt-0.5">{def.sub(x)}</div>}
                     </div>
-                    <KnownBtn small known={known.has(x.id)} onClick={() => store.setKnown(deck, x.id, !known.has(x.id))} />
+                    <div className="flex items-center gap-1 shrink-0">
+                      {def.voice && <SpeakBtn text={def.front(x)} lang={def.voice} small />}
+                      <KnownBtn small known={known.has(x.id)} onClick={() => store.setKnown(deck, x.id, !known.has(x.id))} />
+                    </div>
                   </div>
                   <div className={cn('text-sm text-text-main mt-2 leading-relaxed', deck === 'law' && 'whitespace-pre-line text-[13px]')}>{def.back(x)}</div>
                   {def.detail && def.detail(x) && <div className="text-[11px] text-text-muted mt-1.5 whitespace-pre-line leading-relaxed">{def.detail(x)}</div>}

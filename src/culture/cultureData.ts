@@ -58,7 +58,7 @@ export function pickDaily<T>(arr: T[], d: Date, salt = 0): T | undefined {
 // ---------------------------------------------------------------------
 export type RecordKind = 'book' | 'copy' | 'trip' | 'show' | 'music' | 'vocab';
 export interface CultureRecord { id: string; kind: RecordKind; createdAt?: number; updatedAt?: number; [key: string]: any }
-export type DeckId = 'saja' | 'cheonja' | 'hanja' | 'en' | 'es' | 'esw' | 'ja' | 'law';
+export type DeckId = 'saja' | 'cheonja' | 'hanja' | 'en' | 'grammar' | 'es' | 'esw' | 'ja' | 'law';
 export type Progress = Partial<Record<DeckId, string[]>>;
 
 const LOCAL_KEY = 'eduCultureV1';
