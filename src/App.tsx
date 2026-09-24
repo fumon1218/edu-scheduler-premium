@@ -79,6 +79,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from './lib/firebase';
 import firebaseConfig from '../firebase-applet-config.json';
 import { cn } from './lib/utils';
+import CultureView, { TodayCultureMini } from './culture/CultureView';
+import { Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { 
@@ -294,7 +296,7 @@ export default function App() {
   useEffect(() => {
     if (deepLinkDate) { try { window.history.replaceState(null, '', window.location.pathname); } catch { /* ignore */ } }
   }, [deepLinkDate]);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'teacher' | 'tasks'>(() => deepLinkDate ? 'tasks' : 'calendar');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'teacher' | 'tasks' | 'culture'>(() => deepLinkDate ? 'tasks' : 'calendar');
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('month');
   const [baseDate, setBaseDate] = useState(startOfToday());
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0); 
@@ -1308,7 +1310,7 @@ export default function App() {
 
   // 설정 열기: 업무 관리 화면에서는 설정 창이 없으므로 리스트 화면으로 옮긴 뒤 엽니다.
   const openSettings = () => {
-    if (viewMode === 'tasks') { setViewMode('list'); setIsSettingsOpen(true); }
+    if (viewMode === 'tasks' || viewMode === 'culture') { setViewMode('list'); setIsSettingsOpen(true); }
     else setIsSettingsOpen(v => !v);
   };
 
@@ -1330,6 +1332,7 @@ export default function App() {
           <div onClick={() => setViewMode('calendar')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'calendar' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><CalendarDays size={18} /><span>달력 보기</span></div>
           <div onClick={() => setViewMode('teacher')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'teacher' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><Users size={18} /><span>교사 시간표</span></div>
           <div onClick={() => setViewMode('tasks')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'tasks' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><ListChecks size={18} /><span>업무 관리</span>{taskAlerts.unreadCount > 0 && <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">{taskAlerts.unreadCount}</span>}</div>
+          <div onClick={() => setViewMode('culture')} className={cn("px-4 py-2.5 rounded-full text-sm font-semibold cursor-pointer flex items-center gap-3 transition-colors", viewMode === 'culture' ? "bg-accent-color text-on-accent shadow-sm" : "text-text-muted hover:bg-gray-50")}><Sparkles size={18} /><span>교양</span></div>
           <div onClick={openSettings} className={cn("px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3", isSettingsOpen ? "bg-gray-100 text-text-main" : "text-text-muted hover:bg-gray-50")}><Settings size={18} /><span>설정</span>{isAdmin && accessRequests.length > 0 && <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center" title="승인 대기 중인 계정">{accessRequests.length}</span>}</div>
           <a href={GANGNEUNG_APP_URL} target="_blank" rel="noopener noreferrer" title="강릉분원 방문예약 앱 열기" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><Link2 size={18} /><span>강릉 방문예약</span><span className={cn("ml-auto w-2 h-2 rounded-full", gnStatus === 'ok' ? "bg-green-500" : gnStatus === 'error' ? "bg-red-500" : "bg-gray-300")} /></a>
           <a href={CHURCH_CALENDAR_URL} target="_blank" rel="noopener noreferrer" title="교회 캘린더 앱 열기 (새 창)" className="px-4 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors flex items-center gap-3 text-text-muted hover:bg-gray-50"><CalendarIcon size={18} /><span>교회 캘린더</span><ExternalLink size={13} className="ml-auto opacity-50" /></a>
@@ -1431,7 +1434,7 @@ export default function App() {
                 : <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-surface" />}
             </button>
             <div 
-              onClick={() => { if (viewMode === 'tasks') setViewMode('list'); setIsSettingsOpen(true); }}
+              onClick={() => { if (viewMode === 'tasks' || viewMode === 'culture') setViewMode('list'); setIsSettingsOpen(true); }}
               className="w-8 h-8 rounded-full border border-border-color overflow-hidden cursor-pointer ml-1"
             >
               {user?.photoURL ? (
@@ -1480,8 +1483,9 @@ export default function App() {
 
         {/* Content Viewport */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-10 pb-32 lg:pb-10 bg-bg-primary">
-          {viewMode !== 'tasks' && (
+          {viewMode !== 'tasks' && viewMode !== 'culture' && (
           <div className="max-w-[1400px] mx-auto">
+            <TodayCultureMini onOpen={() => setViewMode('culture')} />
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 lg:gap-12">
               <div className="lg:col-span-4">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 lg:mb-12">
@@ -2353,6 +2357,7 @@ export default function App() {
             </div>
           </div>
         </div>)}
+          {viewMode === 'culture' && <CultureView uid={user?.uid} />}
           {viewMode === 'tasks' && <TasksView teachers={teachers} authorName={user?.displayName || '관리자'} koreanHolidays={koreanHolidays} weatherDaily={weatherDaily} schedules={schedules} alertsOpenReq={alertsOpenReq} initialDate={deepLinkDate} appName={appName} />}
       </div>
 
@@ -2385,6 +2390,10 @@ export default function App() {
             <ListChecks size={20} strokeWidth={2.5} />
             {taskAlerts.unreadCount > 0 && <span className="absolute -top-1 left-1/2 ml-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">{taskAlerts.unreadCount > 9 ? '9+' : taskAlerts.unreadCount}</span>}
             <span className="text-[10px] font-bold">업무</span>
+          </button>
+          <button onClick={() => setViewMode('culture')} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'culture' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
+            <Sparkles size={20} strokeWidth={2.5} />
+            <span className="text-[9px] font-black tracking-tighter">교양</span>
           </button>
           <button onClick={() => setViewMode('teacher')} className={cn("flex flex-col items-center gap-1 transition-all flex-1", viewMode === 'teacher' ? "text-accent-color scale-110" : "text-text-muted opacity-60")}>
             <Users size={20} strokeWidth={2.5} />
