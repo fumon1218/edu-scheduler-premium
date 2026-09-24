@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#344B68">
+<title>아이폰 캘린더에 일정 추가 · 업무 플래너</title>
+<style>
+  :root{--navy:#344B68;--bg:#F4F1E9;--line:#DDD3C3;--soft:#F3EEE6;--text:#2A2A2A;--muted:#8A8272;--red:#B0473A;--green:#3E9B4F}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+       padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+  .wrap{max-width:520px;margin:0 auto;padding:18px 16px 40px}
+  .bar{background:#fff;border:1px solid #E3DCCF;border-radius:24px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center}
+  .bar b{color:var(--navy)} .bar span{color:var(--muted);font-size:13px}
+  h1{font-size:26px;margin:22px 4px 4px;letter-spacing:-.5px}
+  .sub{color:var(--muted);margin:0 4px 16px;font-size:14px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+  label{display:block;font-weight:700;color:var(--navy);font-size:13px;margin:12px 0 6px}
+  label:first-child{margin-top:0}
+  input,select,textarea{width:100%;font-size:17px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#FCFBF8;color:var(--text);font-family:inherit}
+  textarea{min-height:70px;resize:vertical}
+  .row{display:flex;gap:10px}.row>div{flex:1}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .chip{border:1px solid var(--line);background:var(--soft);color:var(--navy);border-radius:14px;padding:6px 11px;font-size:13px;font-weight:700}
+  .chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .toggle{display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:700;color:var(--navy);font-size:14px}
+  .toggle input{width:20px;height:20px}
+  .btn{display:block;width:100%;text-align:center;border:0;border-radius:14px;padding:15px;font-size:17px;font-weight:800;margin-top:10px;text-decoration:none;font-family:inherit}
+  .primary{background:var(--navy);color:#fff}
+  .ghost{background:#fff;color:var(--navy);border:1px solid var(--line)}
+  .hint{font-size:12.5px;color:var(--muted);line-height:1.55;margin:10px 4px 0}
+  .dow{font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar"><b>업무 플래너</b><span>아이폰 캘린더로 보내기</span></div>
+  <h1 id="title">일정 추가</h1>
+  <p class="sub" id="sub">내용을 입력하고 저장하면 아이폰 캘린더 추가 화면이 열립니다.</p>
+
+  <div class="card">
+    <label>빠른 선택</label>
+    <div class="chips" id="presets"></div>
+    <label for="t">제목</label>
+    <input id="t" placeholder="예) 동해해솔학교 모니터링" autocomplete="off">
+    <label for="d">날짜</label>
+    <input id="d" type="date">
+    <div class="toggle"><input type="checkbox" id="allday"><label for="allday" style="margin:0">종일</label></div>
+    <div class="row" id="times">
+      <div><label for="s">시작</label><input id="s" type="time" value="09:00"></div>
+      <div><label for="e">종료</label><input id="e" type="time" value="10:00"></div>
+    </div>
+    <label for="loc">장소</label>
+    <input id="loc" placeholder="선택">
+    <label for="al">알림</label>
+    <select id="al">
+      <option value="">없음</option><option value="10">10분 전</option><option value="30" selected>30분 전</option>
+      <option value="60">1시간 전</option><option value="1440">하루 전</option>
+    </select>
+    <label for="memo">메모</label>
+    <textarea id="memo" placeholder="선택"></textarea>
+  </div>
+
+  <button class="btn primary" id="ios">아이폰 캘린더에 추가</button>
+  <button class="btn ghost" id="dl">.ics 파일로 받기</button>
+  <a class="btn ghost" id="show" href="#">캘린더 앱에서 이 날짜 보기</a>
+  <a class="btn ghost" href="webcal://fumon1218.github.io/edu-scheduler-premium/planner/planner.ics">휴일·일정 전체 구독</a>
+  <p class="hint">‘아이폰 캘린더에 추가’를 누르면 사파리가 일정 미리보기를 띄웁니다. 오른쪽 위 <b>추가</b>를 누르면 저장됩니다.
+  미리보기 대신 파일 다운로드가 뜨면 ‘.ics 파일로 받기’ → 다운로드한 파일을 탭 → <b>모두 추가</b>를 누르세요.</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const q = new URLSearchParams(location.search);
+const pad = n => String(n).padStart(2, "0");
+const today = new Date();
+const dISO = q.get("d") || `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+$("d").value = dISO;
+if (q.get("t")) {
+  $("s").value = q.get("t");
+  const [h, m] = q.get("t").split(":").map(Number);
+  $("e").value = `${pad(Math.min(h + 1, 23))}:${pad(m)}`;
+}
+if (q.get("title")) $("t").value = q.get("title");
+const WD = "일월화수목금토";
+function head() {
+  const [y, m, d] = $("d").value.split("-").map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  $("title").innerHTML = `${m}월 ${d}일 <span class="dow" style="color:${dow===0?'#B0473A':dow===6?'#3E5FA0':'inherit'}">(${WD[dow]})</span> 일정`;
+  const ref = Date.UTC(2001, 0, 1);
+  $("show").href = "calshow:" + Math.floor((Date.UTC(y, m - 1, d, 0) - ref) / 1000);
+}
+head(); $("d").addEventListener("change", head);
+$("allday").addEventListener("change", () => $("times").style.display = $("allday").checked ? "none" : "flex");
+["학교 방문", "모니터링", "업무 협의", "회의", "출장", "연수", "공문 마감", "보고"].forEach(p => {
+  const b = document.createElement("button"); b.className = "chip"; b.textContent = p; b.type = "button";
+  b.onclick = () => { $("t").value = $("t").value ? p + " · " + $("t").value.replace(/^.*? · /, "") : p + " "; $("t").focus(); };
+  $("presets").appendChild(b);
+});
+const esc = s => s.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
+function ics() {
+  const title = $("t").value.trim() || "새 일정";
+  const d = $("d").value.replace(/-/g, "");
+  const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  let dt;
+  if ($("allday").checked) {
+    const [y, m, dd] = $("d").value.split("-").map(Number);
+    const n = new Date(y, m - 1, dd + 1);
+    dt = `DTSTART;VALUE=DATE:${d}\r\nDTEND;VALUE=DATE:${n.getFullYear()}${pad(n.getMonth()+1)}${pad(n.getDate())}\r\n`;
+  } else {
+    let e = $("e").value; if (e <= $("s").value) e = $("s").value;
+    dt = `DTSTART;TZID=Asia/Seoul:${d}T${$("s").value.replace(":", "")}00\r\nDTEND;TZID=Asia/Seoul:${d}T${e.replace(":", "")}00\r\n`;
+  }
+  let a = "";
+  if ($("al").value) a = `BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:${esc(title)}\r\nTRIGGER:-PT${$("al").value}M\r\nEND:VALARM\r\n`;
+  return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//EduPlanner//KO\r\nCALSCALE:GREGORIAN\r\n" +
+    "BEGIN:VTIMEZONE\r\nTZID:Asia/Seoul\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900\r\nTZNAME:KST\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n" +
+    `BEGIN:VEVENT\r\nUID:${Date.now()}@edu-planner\r\nDTSTAMP:${now}\r\n${dt}SUMMARY:${esc(title)}\r\n` +
+    ($("loc").value ? `LOCATION:${esc($("loc").value)}\r\n` : "") +
+    ($("memo").value ? `DESCRIPTION:${esc($("memo").value)}\r\n` : "") + a + "END:VEVENT\r\nEND:VCALENDAR\r\n";
+}
+$("ios").onclick = () => { location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics()); };
+$("dl").onclick = () => {
+  const blob = new Blob([ics()], { type: "text/calendar" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = ($("t").value.trim() || "일정") + ".ics"; document.body.appendChild(a); a.click(); a.remove();
+};
+</script>
+</body>
+</html>
