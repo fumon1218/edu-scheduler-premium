@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "generatedAt": "2026-11-03T14:03:53.172Z",
+  "source": "gangneung-schedule/eduSchedules",
+  "count": 2,
+  "items": [
+    {
+      "id": "Az3MRNIQnOU7PM5eJuMg",
+      "date": "2026-04-29",
+      "day": "월",
+      "startTime": "10:00",
+      "endTime": "12:00",
+      "program": "디지털 리터러시",
+      "location": "2층 디지털융합교실",
+      "roomId": "digital",
+      "target": "중고등"
+    },
+    {
+      "id": "MBBuuwBVjMDNbjGIkE9i",
+      "date": "2026-05-07",
+      "day": "목",
+      "startTime": "10:00",
+      "endTime": "12:00",
+      "program": "장애이해교육",
+      "location": "1층 안전체험관",
+      "roomId": "safety",
+      "target": "유초등"
+    }
+  ]
+}
