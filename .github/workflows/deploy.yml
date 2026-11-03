@@ -3,6 +3,11 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [ main ]
+  # 매일 오전 8:20(한국시간)에 수업 일정 파일을 새로 만들어 배포합니다.
+  # (노션 '오늘의 브리핑'이 오전 9시에 이 파일을 읽어 갑니다)
+  schedule:
+    - cron: '20 23 * * *'
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -15,6 +20,9 @@ jobs:
         run: |
           npm install
           npm run build
+
+      - name: Export edu schedules (JSON + ICS)
+        run: node scripts/export-edu-schedules.mjs dist/planner
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
