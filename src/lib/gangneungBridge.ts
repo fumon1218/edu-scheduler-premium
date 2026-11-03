@@ -9,6 +9,7 @@
 // 각 앱의 원본 데이터는 각자의 DB에 그대로 있고, 서로 상대 데이터를 "보기만" 합니다.
 
 import { getApp, getApps, initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import { collection, doc, getDocs, getFirestore, onSnapshot, writeBatch } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import {
@@ -48,6 +49,27 @@ function getHubDb(): Firestore {
     : initializeApp(GANGNEUNG_FIREBASE_CONFIG, HUB_APP_NAME);
   hubDb = getFirestore(app);
   return hubDb;
+}
+
+// 강릉 앱 저장소에 쓰기 전에 그 프로젝트에 "익명 로그인"을 해 둡니다.
+// (강릉 앱 Firestore 규칙이 '로그인한 경우만 쓰기 허용'으로 바뀌어도 미러가 계속 동작하도록)
+// 에듀 앱 자체의 Google 로그인과는 별개의 앱 인스턴스라 서로 영향을 주지 않습니다.
+// 강릉 프로젝트에서 익명 로그인을 아직 켜지 않았으면 실패하지만, 그때는 예전처럼 로그인 없이 시도합니다.
+let hubAuthPromise: Promise<void> | null = null;
+function ensureHubAuth(): Promise<void> {
+  if (!hubAuthPromise) {
+    getHubDb();
+    const auth = getAuth(getApp(HUB_APP_NAME));
+    hubAuthPromise = auth.currentUser
+      ? Promise.resolve()
+      : signInAnonymously(auth)
+          .then(() => undefined)
+          .catch((err) => {
+            console.warn('강릉 앱 익명 로그인 실패 — 로그인 없이 계속합니다.', err);
+            hubAuthPromise = null; // 다음 동기화 때 다시 시도
+          });
+  }
+  return hubAuthPromise ?? Promise.resolve();
 }
 
 /** 오류를 화면에 보여줄 한국어 문구로 바꿉니다. */
@@ -128,6 +150,7 @@ const BATCH_LIMIT = 400; // Firestore 배치 한도(500) 보다 여유 있게
 export function syncMirror(sources: MirrorSource[], rooms: GnRoom[]): Promise<SyncResult> {
   const run = async (): Promise<SyncResult> => {
     const db = getHubDb();
+    await ensureHubAuth();
     const next = buildMirrorMap(sources, rooms, MIRROR_INCLUDE_TEACHER);
 
     if (!mirrorCache) {
